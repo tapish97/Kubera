@@ -1,0 +1,29 @@
+# Environment files
+.env
+.env.*
+*.env
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend later
+node_modules/
+.next/
+dist/
