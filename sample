@@ -1,0 +1,100 @@
+kubera_frontend/
+
+├── messages/
+
+│   ├── en.json
+
+│   ├── hi.json
+
+│   └── mr.json
+
+│
+
+├── src/
+
+│   ├── app/
+
+│   │   ├── api/
+
+│   │   │   └── auth/
+
+│   │   │       └── [...path]/
+
+│   │   │           └── route.ts
+
+│   │   │
+
+│   │   └── [locale]/
+
+│   │       ├── layout.tsx
+
+│   │       ├── page.tsx
+
+│   │       ├── login/
+
+│   │       │   └── page.tsx
+
+│   │       ├── register/
+
+│   │       │   └── page.tsx
+
+│   │       ├── dashboard/
+
+│   │       │   └── page.tsx
+
+│   │       ├── inventory/
+
+│   │       │   └── page.tsx
+
+│   │       ├── sales/
+
+│   │       │   └── page.tsx
+
+│   │       └── more/
+
+│   │           └── page.tsx
+
+│   │
+
+│   ├── components/
+
+│   │   ├── BottomNav.tsx
+
+│   │   ├── LanguageSwitcher.tsx
+
+│   │   ├── MobileShell.tsx
+
+│   │   └── QuickAction.tsx
+
+│   │
+
+│   ├── i18n/
+
+│   │   ├── routing.ts
+
+│   │   └── request.ts
+
+│   │
+
+│   └── lib/
+
+│       ├── api.ts
+
+│       └── auth/
+
+│           └── server.ts
+
+│
+
+├── proxy.ts
+
+├── next.config.ts
+
+└── .env.local
+
+
+
+
+
+
+

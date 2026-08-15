@@ -1,0 +1,7 @@
+"use client";
+import { useTranslations } from "next-intl";
+
+export function ConfirmSheet({ open, title, description, confirmLabel, busy = false, destructive = false, onConfirm, onClose }: { open: boolean; title: string; description: string; confirmLabel: string; busy?: boolean; destructive?: boolean; onConfirm: () => void; onClose: () => void }) {
+  const t = useTranslations("Common"); if (!open) return null;
+  return <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"><button type="button" aria-label={t("cancel")} onClick={onClose} className="absolute inset-0 bg-[#101a15]/55 backdrop-blur-[2px]" /><section role="dialog" aria-modal="true" aria-labelledby="confirm-title" className="relative w-full max-w-lg rounded-t-[28px] bg-[#fffdf8] px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 shadow-2xl sm:rounded-[28px]"><h2 id="confirm-title" className="text-xl font-bold">{title}</h2><p className="mt-2 text-sm leading-6 text-[#6f746d]">{description}</p><div className="mt-6 grid grid-cols-2 gap-3"><button type="button" onClick={onClose} disabled={busy} className="min-h-12 rounded-2xl border border-[#ded8cc] bg-white font-bold text-[#5f645d]">{t("cancel")}</button><button type="button" onClick={onConfirm} disabled={busy} className={`min-h-12 rounded-2xl font-bold text-white disabled:opacity-60 ${destructive ? "bg-[#a13f32]" : "bg-[#216148]"}`}>{busy ? t("saving") : confirmLabel}</button></div></section></div>;
+}

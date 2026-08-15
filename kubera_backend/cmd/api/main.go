@@ -42,6 +42,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	authHandler := kuberaauth.NewHandler(db)
 
 	mux := http.NewServeMux()
 	protectedMux := http.NewServeMux()
@@ -57,7 +58,10 @@ func main() {
 	})
 
 	// Fruits
-	protectedMux.HandleFunc("GET /me", kuberaauth.Me)
+	protectedMux.HandleFunc("GET /me", authHandler.Me)
+	protectedMux.HandleFunc("POST /me/onboarding", authHandler.CompleteOnboarding)
+	protectedMux.HandleFunc("PATCH /me/profile", authHandler.UpdateProfile)
+	protectedMux.HandleFunc("PATCH /me/shop", authHandler.UpdateShop)
 
 	protectedMux.HandleFunc("POST /fruits", fruitHandler.Create)
 	protectedMux.HandleFunc("GET /fruits", fruitHandler.List)

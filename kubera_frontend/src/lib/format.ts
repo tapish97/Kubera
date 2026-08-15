@@ -1,0 +1,3 @@
+export function formatMoney(value: number, locale: string, currency = "INR", maximumFractionDigits = 0) { return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits }).format(value); }
+export function formatQuantity(value: number, locale: string, unit?: string) { const quantity = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value); return unit ? `${quantity} ${unit}` : quantity; }
+export function formatDate(value: Date | string, locale: string, options: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" }) { return new Intl.DateTimeFormat(locale, options).format(typeof value === "string" ? new Date(value) : value); }

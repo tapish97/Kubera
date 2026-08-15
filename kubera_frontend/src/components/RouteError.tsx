@@ -1,0 +1,3 @@
+"use client";
+import { useTranslations } from "next-intl";
+export function RouteError({ retry }: { retry: () => void }) { const t = useTranslations("Shell"); return <main className="grid min-h-screen place-items-center bg-[#f5f1e8] px-5 text-[#20241f]"><div className="w-full max-w-sm rounded-[26px] border border-[#e7e1d5] bg-[#fffdf8] p-6 text-center shadow-xl"><div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-red-50 font-bold text-red-700">!</div><h1 className="mt-4 text-xl font-bold">{t("errorTitle")}</h1><p className="mt-2 text-sm leading-6 text-[#6f746d]">{t("errorDescription")}</p><button type="button" onClick={retry} className="mt-6 min-h-12 w-full rounded-2xl bg-[#216148] font-bold text-white">{t("tryAgain")}</button></div></main>; }

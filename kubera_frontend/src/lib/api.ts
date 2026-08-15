@@ -21,10 +21,10 @@ export async function apiFetch<T>(
     throw new Error("NEXT_PUBLIC_API_URL is missing");
   }
 
-  const { data: session } = await auth.getSession();
-  const token = session?.session?.token;
+  const { data: tokenData, error: tokenError } = await auth.token();
+  const token = tokenData?.token;
   if (!token) {
-    throw new ApiError("Authentication required", 401);
+    throw new ApiError(tokenError?.message ?? "Authentication required", 401);
   }
 
   const headers = new Headers(init.headers);

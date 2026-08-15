@@ -1,16 +1,23 @@
 package auth
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type contextKey string
 
 const principalKey contextKey = "authenticated-principal"
 
 type Principal struct {
-	AuthUserID string `json:"auth_user_id"`
-	ProfileID  string `json:"profile_id"`
-	ShopID     string `json:"shop_id"`
-	ShopName   string `json:"shop_name"`
+	AuthUserID            string     `json:"auth_user_id"`
+	ProfileID             string     `json:"profile_id"`
+	ProfileName           string     `json:"profile_name"`
+	ShopID                string     `json:"shop_id"`
+	ShopName              string     `json:"shop_name"`
+	Currency              string     `json:"currency"`
+	Timezone              string     `json:"timezone"`
+	OnboardingCompletedAt *time.Time `json:"onboarding_completed_at"`
 }
 
 func withPrincipal(ctx context.Context, principal Principal) context.Context {
