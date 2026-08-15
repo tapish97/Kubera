@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"kubera_backend/internal/auth"
 )
 
 type Handler struct {
@@ -18,7 +19,6 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type CreateRequest struct {
-	ShopID         string  `json:"shop_id"`
 	BatchID        string  `json:"batch_id"`
 	AdjustmentType string  `json:"adjustment_type"`
 	Quantity       float64 `json:"quantity"`
@@ -40,9 +40,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 
-	if req.ShopID == "" || req.BatchID == "" {
-		writeError(w, "shop_id and batch_id are required", http.StatusBadRequest)
+	if req.BatchID == "" {
+		writeError(w, "batch_id is required", http.StatusBadRequest)
 		return
 	}
 
@@ -108,7 +113,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if batchShopID != req.ShopID {
+	if batchShopID != shopID {
 		writeError(w, "batch does not belong to this shop", http.StatusBadRequest)
 		return
 	}
@@ -158,7 +163,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			quantity,
 			COALESCE(reason, '')
 		`,
-		req.ShopID,
+		shopID,
 		req.BatchID,
 		req.AdjustmentType,
 		req.Quantity,
@@ -207,10 +212,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	shopID := r.URL.Query().Get("shop_id")
-
-	if shopID == "" {
-		writeError(w, "shop_id is required", http.StatusBadRequest)
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
 

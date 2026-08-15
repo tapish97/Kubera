@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"kubera_backend/internal/adjustment"
+	kuberaauth "kubera_backend/internal/auth"
 	"kubera_backend/internal/dashboard"
 	"kubera_backend/internal/database"
 	"kubera_backend/internal/fruit"
@@ -37,8 +38,13 @@ func main() {
 	supplierHandler := supplier.NewHandler(db)
 	inventoryHandler := inventory.NewHandler(db)
 	saleHandler := sale.NewHandler(db)
+	authMiddleware, err := kuberaauth.NewMiddleware(db)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	mux := http.NewServeMux()
+	protectedMux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -51,59 +57,63 @@ func main() {
 	})
 
 	// Fruits
-	mux.HandleFunc("POST /fruits", fruitHandler.Create)
-	mux.HandleFunc("GET /fruits", fruitHandler.List)
+	protectedMux.HandleFunc("GET /me", kuberaauth.Me)
+
+	protectedMux.HandleFunc("POST /fruits", fruitHandler.Create)
+	protectedMux.HandleFunc("GET /fruits", fruitHandler.List)
 
 	// Suppliers / Marks
-	mux.HandleFunc("POST /suppliers", supplierHandler.Create)
-	mux.HandleFunc("GET /suppliers", supplierHandler.List)
+	protectedMux.HandleFunc("POST /suppliers", supplierHandler.Create)
+	protectedMux.HandleFunc("GET /suppliers", supplierHandler.List)
 
 	// Inventory
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"POST /inventory/batches",
 		inventoryHandler.CreateBatch,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"GET /inventory",
 		inventoryHandler.List,
 	)
 	//sale
-	mux.HandleFunc("POST /sales", saleHandler.Create)
-	mux.HandleFunc("GET /sales", saleHandler.List)
+	protectedMux.HandleFunc("POST /sales", saleHandler.Create)
+	protectedMux.HandleFunc("GET /sales", saleHandler.List)
 
 	adjustmentHandler := adjustment.NewHandler(db)
 	dashboardHandler := dashboard.NewHandler(db)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"POST /inventory/adjustments",
 		adjustmentHandler.Create,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"GET /inventory/adjustments",
 		adjustmentHandler.List,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"GET /dashboard/summary",
 		dashboardHandler.Summary,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"GET /dashboard/recent-sales",
 		dashboardHandler.RecentSales,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"GET /dashboard/stock-by-fruit",
 		dashboardHandler.StockByFruit,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"GET /dashboard/stock-by-supplier",
 		dashboardHandler.StockBySupplier,
 	)
+
+	mux.Handle("/", authMiddleware.Protect(protectedMux))
 
 	port := os.Getenv("PORT")
 

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"kubera_backend/internal/auth"
 )
 
 type Handler struct {
@@ -16,10 +17,9 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
-	shopID := r.URL.Query().Get("shop_id")
-
-	if shopID == "" {
-		writeError(w, "shop_id is required", http.StatusBadRequest)
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
 
@@ -86,7 +86,11 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) StockByFruit(w http.ResponseWriter, r *http.Request) {
-	shopID := r.URL.Query().Get("shop_id")
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 
 	rows, err := h.db.Query(
 		r.Context(),
@@ -137,7 +141,11 @@ func (h *Handler) StockByFruit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) StockBySupplier(w http.ResponseWriter, r *http.Request) {
-	shopID := r.URL.Query().Get("shop_id")
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 
 	rows, err := h.db.Query(
 		r.Context(),
@@ -204,7 +212,11 @@ func (h *Handler) StockBySupplier(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RecentSales(w http.ResponseWriter, r *http.Request) {
-	shopID := r.URL.Query().Get("shop_id")
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 
 	rows, err := h.db.Query(
 		r.Context(),

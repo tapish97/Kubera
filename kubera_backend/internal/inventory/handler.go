@@ -2,10 +2,13 @@ package inventory
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"kubera_backend/internal/auth"
 )
 
 type Handler struct {
@@ -17,7 +20,6 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type CreateBatchRequest struct {
-	ShopID               string   `json:"shop_id"`
 	FruitID              string   `json:"fruit_id"`
 	SupplierID           string   `json:"supplier_id"`
 	Quality              *string  `json:"quality"`
@@ -48,9 +50,13 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 
-	if req.ShopID == "" ||
-		req.FruitID == "" ||
+	if req.FruitID == "" ||
 		req.SupplierID == "" ||
 		req.Quantity <= 0 {
 
@@ -82,7 +88,7 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 			unit,
 			purchase_price_per_unit
 		)
-		VALUES (
+		SELECT
 			$1,
 			$2,
 			$3,
@@ -92,6 +98,13 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 			$6,
 			$7,
 			$8
+		WHERE EXISTS (
+			SELECT 1 FROM fruits
+			WHERE id = $2 AND shop_id = $1 AND is_active = TRUE
+		)
+		AND EXISTS (
+			SELECT 1 FROM suppliers
+			WHERE id = $3 AND shop_id = $1 AND is_active = TRUE
 		)
 		RETURNING
 			id,
@@ -106,7 +119,7 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 			purchase_price_per_unit,
 			received_at
 		`,
-		req.ShopID,
+		shopID,
 		req.FruitID,
 		req.SupplierID,
 		req.Quality,
@@ -128,6 +141,11 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		&batch.ReceivedAt,
 	)
 
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, "fruit or supplier not found for this shop", http.StatusBadRequest)
+		return
+	}
+
 	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -137,10 +155,9 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	shopID := r.URL.Query().Get("shop_id")
-
-	if shopID == "" {
-		writeError(w, "shop_id is required", http.StatusBadRequest)
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
 

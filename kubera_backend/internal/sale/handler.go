@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"kubera_backend/internal/auth"
 )
 
 type Handler struct {
@@ -24,9 +25,8 @@ type SaleItemRequest struct {
 }
 
 type CreateSaleRequest struct {
-	ShopID string            `json:"shop_id"`
-	Items  []SaleItemRequest `json:"items"`
-	Notes  string            `json:"notes"`
+	Items []SaleItemRequest `json:"items"`
+	Notes string            `json:"notes"`
 }
 
 type SaleItemResponse struct {
@@ -52,9 +52,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-
-	if req.ShopID == "" {
-		writeError(w, "shop_id is required", http.StatusBadRequest)
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		VALUES ($1, NULLIF($2, ''))
 		RETURNING id
 		`,
-		req.ShopID,
+		shopID,
 		req.Notes,
 	).Scan(&saleID)
 
@@ -111,7 +111,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	response := SaleResponse{
 		ID:     saleID,
-		ShopID: req.ShopID,
+		ShopID: shopID,
 		Items:  make([]SaleItemResponse, 0),
 	}
 
@@ -153,7 +153,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Prevent one shop from selling another shop's stock.
-		if batchShopID != req.ShopID {
+		if batchShopID != shopID {
 			writeError(w, "batch does not belong to this shop", http.StatusBadRequest)
 			return
 		}
@@ -246,10 +246,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	shopID := r.URL.Query().Get("shop_id")
-
-	if shopID == "" {
-		writeError(w, "shop_id is required", http.StatusBadRequest)
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
 

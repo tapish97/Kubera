@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"kubera_backend/internal/auth"
 )
 
 type Handler struct {
@@ -23,7 +24,6 @@ type Fruit struct {
 }
 
 type CreateRequest struct {
-	ShopID      string `json:"shop_id"`
 	Name        string `json:"name"`
 	DefaultUnit string `json:"default_unit"`
 }
@@ -35,9 +35,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 
-	if req.ShopID == "" || req.Name == "" {
-		writeError(w, "shop_id and name are required", http.StatusBadRequest)
+	if req.Name == "" {
+		writeError(w, "name is required", http.StatusBadRequest)
 		return
 	}
 
@@ -58,7 +63,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		VALUES ($1, $2, $3)
 		RETURNING id, shop_id, name, default_unit
 		`,
-		req.ShopID,
+		shopID,
 		req.Name,
 		req.DefaultUnit,
 	).Scan(
@@ -77,10 +82,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	shopID := r.URL.Query().Get("shop_id")
-
-	if shopID == "" {
-		writeError(w, "shop_id is required", http.StatusBadRequest)
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
 
