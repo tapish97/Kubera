@@ -3,6 +3,7 @@ package fruit
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -79,6 +80,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		log.Printf("create fruit for shop %s: %v", shop, err)
 		writeError(w, "could not create fruit", http.StatusInternalServerError)
 		return
 	}

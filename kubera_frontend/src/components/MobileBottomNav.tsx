@@ -4,6 +4,7 @@ import { DashboardIcon } from "@/components/DashboardIcon";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { QuickActionMenu } from "@/components/QuickActionMenu";
 
 const items = [
   { key: "home", icon: "home" as const, route: "dashboard" },
@@ -31,11 +32,10 @@ export function MobileBottomNav() {
             <span className={item.primary ? "mt-0.5 text-[#216148]" : ""}>{t(item.key)}</span>
           </>;
 
+          if (item.primary) return <QuickActionMenu key={item.key} />;
           return item.route ? (
             <Link key={item.key} href={`/${locale}/${item.route}`} aria-current={active ? "page" : undefined} className={className}>{content}</Link>
-          ) : (
-            <button key={item.key} type="button" disabled aria-label={`${t(item.key)}, coming soon`} className={className}>{content}</button>
-          );
+          ) : <button key={item.key} type="button" disabled className={className}>{content}</button>;
         })}
       </div>
     </nav>
