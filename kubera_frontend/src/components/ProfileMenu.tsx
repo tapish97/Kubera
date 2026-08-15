@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { signOut } from "@/features/auth/actions";
 import { useTranslations } from "next-intl";
 
@@ -15,7 +15,6 @@ export function ProfileMenu({
   shopName: string;
 }) {
   const { locale } = useParams<{ locale: string }>();
-  const router = useRouter();
   const t = useTranslations("Profile");
   const common = useTranslations("Common");
   const [open, setOpen] = useState(false);
@@ -28,15 +27,11 @@ export function ProfileMenu({
     setError("");
 
     try {
-      const result = await signOut();
+      const result = await signOut(locale);
       if (!result.ok) {
         setError(result.message || t("logoutError"));
         return;
       }
-
-      setOpen(false);
-      router.replace(`/${locale}/login`);
-      router.refresh();
     } catch {
       setError(t("logoutError"));
     } finally {

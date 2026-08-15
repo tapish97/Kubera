@@ -16,6 +16,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
       ...defaults,
       ...messages,
       Onboarding: { ...defaults.Onboarding, ...messages.Onboarding },
+      Navigation: { ...defaults.Navigation, ...messages.Navigation },
       Shell: defaults.Shell,
     },
   };

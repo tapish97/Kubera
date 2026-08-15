@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"errors"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -16,6 +19,7 @@ import (
 	"kubera_backend/internal/database"
 	"kubera_backend/internal/fruit"
 	"kubera_backend/internal/inventory"
+	"kubera_backend/internal/requestlog"
 	"kubera_backend/internal/sale"
 	"kubera_backend/internal/supplier"
 )
@@ -24,13 +28,17 @@ func main() {
 	// Loads .env locally.
 	// On hosted environments, env variables will be injected directly.
 	_ = godotenv.Load()
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
 
 	ctx := context.Background()
 
 	db, err := database.Connect(ctx)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("database connection failed", "error", err)
+		os.Exit(1)
 	}
+	logger.Info("database connected")
 
 	defer db.Close()
 
@@ -40,14 +48,15 @@ func main() {
 	saleHandler := sale.NewHandler(db)
 	authMiddleware, err := kuberaauth.NewMiddleware(db)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("authentication configuration failed", "error", err)
+		os.Exit(1)
 	}
 	authHandler := kuberaauth.NewHandler(db)
 
 	mux := http.NewServeMux()
 	protectedMux := http.NewServeMux()
 
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	healthHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -56,6 +65,7 @@ func main() {
 			"database": "connected",
 		})
 	})
+	mux.Handle("GET /health", requestlog.Middleware(logger, nil, healthHandler))
 
 	// Fruits
 	protectedMux.HandleFunc("GET /me", authHandler.Me)
@@ -72,6 +82,7 @@ func main() {
 	// Suppliers / Marks
 	protectedMux.HandleFunc("POST /suppliers", supplierHandler.Create)
 	protectedMux.HandleFunc("GET /suppliers", supplierHandler.List)
+	protectedMux.HandleFunc("PATCH /suppliers/{id}", supplierHandler.Update)
 
 	// Inventory
 	protectedMux.HandleFunc(
@@ -106,6 +117,7 @@ func main() {
 		"GET /dashboard/summary",
 		dashboardHandler.Summary,
 	)
+	protectedMux.HandleFunc("GET /reports/daily", dashboardHandler.DailyReport)
 
 	protectedMux.HandleFunc(
 		"GET /dashboard/recent-sales",
@@ -136,15 +148,27 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	log.Printf(
-		"Kubera API running on http://localhost:%s",
-		port,
-	)
+	logger.Info("server starting", "port", port, "service", "kubera-api")
+	serverErrors := make(chan error, 1)
+	go func() { serverErrors <- server.ListenAndServe() }()
 
-	if err := server.ListenAndServe(); err != nil &&
-		err != http.ErrServerClosed {
-
-		log.Fatal(err)
+	shutdownSignals := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignals, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case received := <-shutdownSignals:
+		logger.Info("shutdown signal received", "signal", received.String())
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownContext); err != nil {
+			logger.Error("graceful shutdown failed", "error", err)
+			return
+		}
+		logger.Info("server stopped")
+	case err := <-serverErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server stopped unexpectedly", "error", err)
+			os.Exit(1)
+		}
 	}
 }
 

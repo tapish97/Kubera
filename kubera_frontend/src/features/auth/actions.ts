@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth/server";
+import { redirect } from "next/navigation";
 
 type AuthActionResult =
   | { ok: true }
@@ -37,14 +38,16 @@ export async function signUpWithEmail(formData: FormData): Promise<AuthActionRes
   }
 }
 
-export async function signOut(): Promise<AuthActionResult> {
+export async function signOut(locale: string): Promise<AuthActionResult> {
   try {
     const { error } = await auth.signOut();
     if (error) {
       return { ok: false, message: error.message || "Could not log out" };
     }
-    return { ok: true };
   } catch {
     return { ok: false, message: "Could not connect. Please try again." };
   }
+
+  const safeLocale = ["en", "hi", "mr"].includes(locale) ? locale : "en";
+  redirect(`/${safeLocale}/login`);
 }

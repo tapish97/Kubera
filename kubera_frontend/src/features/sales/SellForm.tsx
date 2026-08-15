@@ -7,7 +7,7 @@ import { StatusBanner } from "@/components/StatusBanner";
 import { recordSale } from "@/features/sales/actions";
 import { formatDate, formatMoney } from "@/lib/format";
 
-type Batch = { batch_id: string; fruit: string; mark: string; quality: string | null; size: string; quantity_remaining: number; unit: string; received_at: string };
+type Batch = { batch_id: string; fruit: string; mark: string; quality: string | null; size: string; quantity_remaining: number; unit: string; received_at: string; purchase_price_per_unit: number | null };
 
 export function SellForm({ locale, currency = "INR", timezone = "UTC", batches }: { locale: string; currency?: string; timezone?: string; batches: Batch[] }) {
   const t = useTranslations("Sell");
@@ -19,6 +19,7 @@ export function SellForm({ locale, currency = "INR", timezone = "UTC", batches }
   const [price, setPrice] = useState("");
   const selected = batches.find((batch) => batch.batch_id === batchID);
   const total = Number(quantity) * Number(price);
+  const expectedProfit = selected?.purchase_price_per_unit == null ? null : Number(quantity) * (Number(price) - Number(selected.purchase_price_per_unit));
   const input = "mt-2 min-h-14 w-full rounded-2xl border border-[#d8d2c6] bg-white px-4 text-base text-[#20241f] outline-none focus:border-[#216148]";
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -42,10 +43,11 @@ export function SellForm({ locale, currency = "INR", timezone = "UTC", batches }
       </select>
     </label>
     <p className="rounded-2xl bg-[#edf4ef] px-4 py-3 text-sm font-semibold text-[#216148]">{t("available", { quantity: selected?.quantity_remaining ?? 0, unit: selected?.unit ?? "" })}</p>
+    <div className="rounded-2xl border border-[#dce6df] bg-[#f7faf8] px-4 py-3"><p className="text-xs font-bold uppercase tracking-wider text-[#648072]">{t("boughtFor")}</p><p className="mt-1 text-lg font-bold text-[#173f31]">{selected?.purchase_price_per_unit == null ? t("buyPriceUnknown") : `${formatMoney(selected.purchase_price_per_unit, locale, currency)} / ${selected.unit}`}</p></div>
     <label className="block font-bold">2. {t("quantity")}<input name="quantity" value={quantity} onChange={(event) => setQuantity(event.target.value)} type="number" inputMode="decimal" min="0.01" max={selected?.quantity_remaining} step="0.01" required className={input} /></label>
     <label className="block font-bold">3. {t("price")}<input name="selling_price_per_unit" value={price} onChange={(event) => setPrice(event.target.value)} type="number" inputMode="decimal" min="0" step="0.01" required className={input} /></label>
     <details className="rounded-2xl border border-[#e7e1d5] px-4 py-3"><summary className="cursor-pointer text-sm font-bold text-[#216148]">{t("notes")}</summary><textarea name="notes" rows={3} className={`${input} py-3`} /></details>
-    <div className="rounded-[22px] bg-[#fff1d9] p-4"><p className="text-xs font-bold uppercase tracking-wider text-[#7b5b27]">{t("total")}</p><p className="mt-1 text-2xl font-bold text-[#4e350d]">{formatMoney(Number.isFinite(total) ? total : 0, locale, currency)}</p></div>
+    <div className="rounded-[22px] bg-[#fff1d9] p-4"><p className="text-xs font-bold uppercase tracking-wider text-[#7b5b27]">{t("total")}</p><p className="mt-1 text-2xl font-bold text-[#4e350d]">{formatMoney(Number.isFinite(total) ? total : 0, locale, currency)}</p>{expectedProfit != null && Number.isFinite(expectedProfit) && <p className={`mt-2 text-sm font-bold ${expectedProfit < 0 ? "text-red-700" : "text-[#216148]"}`}>{t("expectedProfit")}: {formatMoney(expectedProfit, locale, currency)}</p>}</div>
     {error && <StatusBanner tone="error" title={error} />}
     <button disabled={pending} className="min-h-14 w-full rounded-2xl bg-[#f1bb5d] text-lg font-bold text-[#4e350d] shadow-lg disabled:opacity-60">{pending ? t("saving") : t("save")}</button>
   </form>;

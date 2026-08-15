@@ -3,6 +3,7 @@ package dashboard
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"kubera_backend/internal/auth"
@@ -10,6 +11,53 @@ import (
 
 type Handler struct {
 	db *pgxpool.Pool
+}
+
+func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok || principal.ShopID == "" {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	timezone := principal.Timezone
+	if timezone == "" {
+		timezone = "UTC"
+	}
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		writeError(w, "invalid shop timezone", http.StatusInternalServerError)
+		return
+	}
+	reportDate := r.URL.Query().Get("date")
+	if reportDate == "" {
+		reportDate = time.Now().In(location).Format("2006-01-02")
+	}
+	if _, err := time.Parse("2006-01-02", reportDate); err != nil {
+		writeError(w, "date must use YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+
+	type Report struct {
+		Date              string  `json:"date"`
+		StockBatchesAdded int     `json:"stock_batches_added"`
+		PurchaseValue     float64 `json:"purchase_value"`
+		SaleCount         int     `json:"sale_count"`
+		SalesRevenue      float64 `json:"sales_revenue"`
+		GrossProfit       float64 `json:"gross_profit"`
+	}
+	result := Report{Date: reportDate}
+	err = h.db.QueryRow(r.Context(), `SELECT
+		(SELECT COUNT(*) FROM inventory_batches WHERE shop_id=$1 AND (received_at AT TIME ZONE $2)::date=$3::date),
+		COALESCE((SELECT SUM(quantity_received * COALESCE(purchase_price_per_unit,0)) FROM inventory_batches WHERE shop_id=$1 AND (received_at AT TIME ZONE $2)::date=$3::date),0),
+		(SELECT COUNT(*) FROM sales WHERE shop_id=$1 AND (sold_at AT TIME ZONE $2)::date=$3::date),
+		COALESCE((SELECT SUM(si.total_sale_amount) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date),0),
+		COALESCE((SELECT SUM(si.gross_profit) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date),0)`, principal.ShopID, timezone, reportDate).
+		Scan(&result.StockBatchesAdded, &result.PurchaseValue, &result.SaleCount, &result.SalesRevenue, &result.GrossProfit)
+	if err != nil {
+		writeError(w, "could not load daily report", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func NewHandler(db *pgxpool.Pool) *Handler {

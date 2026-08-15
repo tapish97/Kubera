@@ -2,12 +2,13 @@ package auth
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"kubera_backend/internal/requestlog"
 )
 
 type Middleware struct {
@@ -32,21 +33,27 @@ func (m *Middleware) Protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rawToken, ok := bearerToken(r.Header.Get("Authorization"))
 		if !ok {
+			slog.Warn("authentication rejected", "method", r.Method, "path", r.URL.Path, "reason", "missing bearer token")
 			writeAuthError(w, "authentication required", http.StatusUnauthorized)
 			return
 		}
 		claims, err := m.verifier.Verify(r.Context(), rawToken)
 		if err != nil {
+			slog.Warn("authentication rejected", "method", r.Method, "path", r.URL.Path, "reason", "invalid or expired token")
 			writeAuthError(w, "invalid or expired authentication token", http.StatusUnauthorized)
 			return
 		}
 		principal, err := resolvePrincipal(r.Context(), m.db, claims)
 		if err != nil {
-			log.Printf("resolve authenticated user %q: %v", claims.Subject, err)
+			slog.Error("could not resolve authenticated account", "auth_user_id", claims.Subject, "error", err)
 			writeAuthError(w, "could not resolve authenticated account", http.StatusInternalServerError)
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(withPrincipal(r.Context(), principal)))
+		authenticated := r.WithContext(withPrincipal(r.Context(), principal))
+		requestlog.Middleware(slog.Default(), func(request *http.Request) []any {
+			resolved, _ := PrincipalFromContext(request.Context())
+			return []any{"auth_user_id", resolved.AuthUserID, "profile_id", resolved.ProfileID, "shop_id", resolved.ShopID}
+		}, next).ServeHTTP(w, authenticated)
 	})
 }
 

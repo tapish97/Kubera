@@ -12,7 +12,7 @@ const items = [
   { key: "inventory", icon: "inventory" as const, route: "inventory" },
   { key: "add", icon: "plus" as const, primary: true },
   { key: "sales", icon: "sale" as const, route: "sales" },
-  { key: "more", icon: "more" as const, route: "more" },
+  { key: "shop", icon: "more" as const, route: "shop" },
 ];
 
 function AddMenu({ locale }: { locale: string }) {

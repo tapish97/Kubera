@@ -296,6 +296,10 @@ func (h *Handler) CreateQuickBatch(w http.ResponseWriter, r *http.Request) {
 	} else {
 		err = tx.QueryRow(r.Context(), `SELECT id FROM suppliers WHERE shop_id = $1 AND lower(mark) = lower($2) LIMIT 1`, shopID, req.Mark).Scan(&supplierID)
 		if errors.Is(err, pgx.ErrNoRows) {
+			if req.LocationLabel == "" || req.Latitude == nil || req.Longitude == nil {
+				writeError(w, "locality and map pin are required for a new mark", http.StatusBadRequest)
+				return
+			}
 			if req.SupplierName == "" {
 				req.SupplierName = req.Mark
 			}
