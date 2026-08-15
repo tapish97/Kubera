@@ -58,6 +58,61 @@ type Batch struct {
 	ReceivedAt           time.Time `json:"received_at"`
 }
 
+type SupplierOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Mark string `json:"mark"`
+}
+type FruitOption struct {
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	DefaultUnit string           `json:"default_unit"`
+	Suppliers   []SupplierOption `json:"suppliers"`
+}
+
+func (h *Handler) PurchaseOptions(w http.ResponseWriter, r *http.Request) {
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	rows, err := h.db.Query(r.Context(), `SELECT f.id, f.name, f.default_unit, s.id, s.name, s.mark
+		FROM fruits f LEFT JOIN inventory_batches ib ON ib.fruit_id = f.id AND ib.shop_id = f.shop_id
+		LEFT JOIN suppliers s ON s.id = ib.supplier_id AND s.shop_id = f.shop_id AND s.is_active = TRUE
+		WHERE f.shop_id = $1 AND f.is_active = TRUE ORDER BY lower(f.name), lower(s.mark)`, shopID)
+	if err != nil {
+		writeError(w, "could not load purchase choices", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	options := make([]FruitOption, 0)
+	positions := make(map[string]int)
+	seen := make(map[string]bool)
+	for rows.Next() {
+		var fruitID, fruitName, unit string
+		var supplierID, supplierName, mark *string
+		if err := rows.Scan(&fruitID, &fruitName, &unit, &supplierID, &supplierName, &mark); err != nil {
+			writeError(w, "could not load purchase choices", http.StatusInternalServerError)
+			return
+		}
+		position, exists := positions[fruitID]
+		if !exists {
+			position = len(options)
+			positions[fruitID] = position
+			options = append(options, FruitOption{ID: fruitID, Name: fruitName, DefaultUnit: unit, Suppliers: make([]SupplierOption, 0)})
+		}
+		if supplierID != nil && !seen[fruitID+":"+*supplierID] {
+			options[position].Suppliers = append(options[position].Suppliers, SupplierOption{ID: *supplierID, Name: *supplierName, Mark: *mark})
+			seen[fruitID+":"+*supplierID] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, "could not load purchase choices", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, options)
+}
+
 func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 	var req CreateBatchRequest
 

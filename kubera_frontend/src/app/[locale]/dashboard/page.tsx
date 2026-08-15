@@ -14,23 +14,26 @@ export const dynamic = "force-dynamic";
 type CurrentAccount = { profile_id: string; shop_id: string; shop_name: string; currency: string; onboarding_completed_at: string | null };
 type Summary = { total_inventory_quantity: number; today_sales: number; today_gross_profit: number };
 type RecentSale = { sale_id: string; sold_at: string; fruit: string; mark: string; quantity: number; unit: string; total_sale_amount: number };
+type StockItem = { fruit: string; quantity: number; unit: string };
 
 const emptySummary: Summary = { total_inventory_quantity: 0, today_sales: 0, today_gross_profit: 0 };
 
 async function loadShopData() {
   try {
     const account = await apiFetch<CurrentAccount>("/me");
-    const [summary, recentSales] = await Promise.all([
+    const [summary, recentSales, stock] = await Promise.all([
       apiFetch<Summary>("/dashboard/summary"),
       apiFetch<RecentSale[]>("/dashboard/recent-sales"),
+      apiFetch<StockItem[]>("/dashboard/stock-by-fruit"),
     ]);
-    return { account, summary, recentSales, connected: true };
+    return { account, summary, recentSales, stock, connected: true };
   } catch (error) {
 	const detail = error instanceof Error ? error.message : "";
     return {
       account: null,
       summary: emptySummary,
       recentSales: [] as RecentSale[],
+	  stock: [] as StockItem[],
       connected: false,
       connectionError: error instanceof ApiError && error.status === 401 ? "shopSession" : "shopUnavailable",
 	  connectionDetail: detail,
@@ -101,9 +104,16 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
               <p className="mt-4 text-2xl font-bold tracking-[-0.04em] text-[#634411]">{formatMoney(data.summary.today_gross_profit, locale, currency)}</p><p className="mt-1 text-xs text-[#8f7957]">{t("grossProfit")}</p>
             </article>
             <article className="col-span-2 flex items-center justify-between rounded-[22px] border border-[#e7e1d5] bg-white p-4 shadow-[0_8px_24px_rgba(56,57,48,0.05)]">
-              <div><p className="text-xs font-semibold text-[#777b73]">{t("inventory")}</p><p className="mt-1 text-2xl font-bold tracking-[-0.04em]">{formatQuantity(data.summary.total_inventory_quantity, locale)}</p><p className="mt-0.5 text-xs text-[#8a8d84]">{t("activeBatches")}</p></div>
+              <div><p className="text-xs font-semibold text-[#777b73]">{t("inventory")}</p><p className="mt-1 text-2xl font-bold tracking-[-0.04em]">{data.stock.length}</p><p className="mt-0.5 text-xs text-[#8a8d84]">{t("fruitTypes")}</p></div>
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#edf4ef] text-[#216148]"><DashboardIcon name="box" className="h-6 w-6" /></div>
             </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="remaining-heading" className="px-5 pt-8">
+          <div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a8d84]">{t("quickView")}</p><h2 id="remaining-heading" className="mt-1 text-lg font-semibold tracking-tight">{t("remainingStock")}</h2></div><Link href={`/${locale}/inventory`} className="text-xs font-bold text-[#216148]">{t("viewStock")} →</Link></div>
+          <div className="mt-3 overflow-hidden rounded-[22px] border border-[#e7e1d5] bg-white">
+            {data.stock.length === 0 ? <div className="px-5 py-7 text-center"><p className="text-sm font-semibold">{t("noStock")}</p><Link href={`/${locale}/stock/add`} className="mt-3 inline-block text-sm font-bold text-[#216148]">{t("buyFirstStock")} →</Link></div> : data.stock.slice(0, 6).map((item) => <div key={`${item.fruit}-${item.unit}`} className="flex items-center justify-between border-b border-[#eee9df] px-4 py-3.5 last:border-0"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#edf4ef] text-[#216148]"><DashboardIcon name="inventory" className="h-4 w-4"/></span><p className="font-bold">{item.fruit}</p></div><p className="font-bold text-[#216148]">{formatQuantity(item.quantity, locale, item.unit)}</p></div>)}
           </div>
         </section>
 
