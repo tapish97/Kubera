@@ -10,6 +10,11 @@ function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
+function coordinate(formData: FormData, key: string) {
+  const raw = value(formData, key);
+  return raw === "" ? null : Number(raw);
+}
+
 export async function completeOnboarding(formData: FormData): Promise<ShopActionResult> {
   try {
     await apiFetch("/me/onboarding", {
@@ -19,6 +24,9 @@ export async function completeOnboarding(formData: FormData): Promise<ShopAction
         shop_name: value(formData, "shop_name"),
         currency: value(formData, "currency"),
         timezone: value(formData, "timezone"),
+        location_label: value(formData, "location_label"),
+        latitude: coordinate(formData, "latitude"),
+        longitude: coordinate(formData, "longitude"),
       }),
     });
     return { ok: true };
@@ -42,6 +50,9 @@ export async function updateSettings(formData: FormData): Promise<ShopActionResu
         name: value(formData, "shop_name"),
         currency: value(formData, "currency"),
         timezone: value(formData, "timezone"),
+        location_label: value(formData, "location_label"),
+        latitude: coordinate(formData, "latitude"),
+        longitude: coordinate(formData, "longitude"),
       }),
     });
     return { ok: true };

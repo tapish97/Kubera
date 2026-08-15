@@ -12,6 +12,11 @@ export default getRequestConfig(async ({ requestLocale }) => {
 
   return {
     locale,
-    messages: { ...defaults, ...messages, Shell: defaults.Shell },
+    messages: {
+      ...defaults,
+      ...messages,
+      Onboarding: { ...defaults.Onboarding, ...messages.Onboarding },
+      Shell: defaults.Shell,
+    },
   };
 });

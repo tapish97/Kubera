@@ -17,19 +17,25 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type Supplier struct {
-	ID                  string `json:"id"`
-	ShopID              string `json:"shop_id"`
-	Name                string `json:"name"`
-	Mark                string `json:"mark"`
-	Phone               string `json:"phone,omitempty"`
-	DefaultLeadTimeDays *int   `json:"default_lead_time_days,omitempty"`
+	ID                  string   `json:"id"`
+	ShopID              string   `json:"shop_id"`
+	Name                string   `json:"name"`
+	Mark                string   `json:"mark"`
+	Phone               string   `json:"phone,omitempty"`
+	DefaultLeadTimeDays *int     `json:"default_lead_time_days,omitempty"`
+	LocationLabel       string   `json:"location_label"`
+	Latitude            *float64 `json:"latitude"`
+	Longitude           *float64 `json:"longitude"`
 }
 
 type CreateRequest struct {
-	Name                string `json:"name"`
-	Mark                string `json:"mark"`
-	Phone               string `json:"phone"`
-	DefaultLeadTimeDays *int   `json:"default_lead_time_days"`
+	Name                string   `json:"name"`
+	Mark                string   `json:"mark"`
+	Phone               string   `json:"phone"`
+	DefaultLeadTimeDays *int     `json:"default_lead_time_days"`
+	LocationLabel       string   `json:"location_label"`
+	Latitude            *float64 `json:"latitude"`
+	Longitude           *float64 `json:"longitude"`
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -65,13 +71,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			mark,
 			phone,
 			default_lead_time_days
+			, location_label, latitude, longitude
 		)
 		VALUES (
 			$1,
 			$2,
 			$3,
 			NULLIF($4, ''),
-			$5
+			$5, NULLIF($6, ''), $7, $8
 		)
 		RETURNING
 			id,
@@ -80,12 +87,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			mark,
 			COALESCE(phone, ''),
 			default_lead_time_days
+			, COALESCE(location_label, ''), latitude, longitude
 		`,
 		shopID,
 		req.Name,
 		req.Mark,
 		req.Phone,
 		req.DefaultLeadTimeDays,
+		req.LocationLabel,
+		req.Latitude,
+		req.Longitude,
 	).Scan(
 		&supplier.ID,
 		&supplier.ShopID,
@@ -93,6 +104,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		&supplier.Mark,
 		&supplier.Phone,
 		&supplier.DefaultLeadTimeDays,
+		&supplier.LocationLabel,
+		&supplier.Latitude,
+		&supplier.Longitude,
 	)
 
 	if err != nil {
@@ -120,6 +134,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			mark,
 			COALESCE(phone, ''),
 			default_lead_time_days
+			, COALESCE(location_label, ''), latitude, longitude
 		FROM suppliers
 		WHERE shop_id = $1
 		  AND is_active = TRUE
@@ -147,6 +162,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			&supplier.Mark,
 			&supplier.Phone,
 			&supplier.DefaultLeadTimeDays,
+			&supplier.LocationLabel,
+			&supplier.Latitude,
+			&supplier.Longitude,
 		); err != nil {
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return

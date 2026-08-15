@@ -15,6 +15,9 @@ type Account = {
   shop_name: string;
   currency: string;
   timezone: string;
+  location_label: string;
+  latitude: number | null;
+  longitude: number | null;
   onboarding_completed_at: string | null;
 };
 
@@ -33,7 +36,7 @@ export default async function MorePage({ params }: PageProps<"/[locale]/more">) 
         <PageHeader eyebrow={t("eyebrow")} title={t("title")} actions={<><LanguageSwitcher /><div className="rounded-full bg-[#173f31] p-0.5"><ProfileMenu name={session.user.name ?? account.profile_name} email={session.user.email} shopName={account.shop_name} /></div></>} />
 
         <section className="mt-7 rounded-[26px] border border-[#e7e1d5] bg-white p-5 shadow-[0_12px_35px_rgba(44,53,43,0.06)]">
-          <ShopSettingsForm mode="settings" profileName={account.profile_name} shopName={account.shop_name} currency={account.currency} timezone={account.timezone} />
+          <ShopSettingsForm mode="settings" profileName={account.profile_name} shopName={account.shop_name} currency={account.currency} timezone={account.timezone} locationLabel={account.location_label} latitude={account.latitude} longitude={account.longitude} />
         </section>
       </div>
     </AppShell>

@@ -17,10 +17,15 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
-	shopID, ok := auth.ShopIDFromContext(r.Context())
-	if !ok {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok || principal.ShopID == "" {
 		writeError(w, "authentication required", http.StatusUnauthorized)
 		return
+	}
+	shopID := principal.ShopID
+	timezone := principal.Timezone
+	if timezone == "" {
+		timezone = "UTC"
 	}
 
 	type Summary struct {
@@ -51,8 +56,8 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 					JOIN sales s
 						ON s.id = si.sale_id
 					WHERE s.shop_id = $1
-					  AND (s.sold_at AT TIME ZONE 'Asia/Kolkata')::date =
-						  (NOW() AT TIME ZONE 'Asia/Kolkata')::date
+					  AND (s.sold_at AT TIME ZONE $2)::date =
+						  (NOW() AT TIME ZONE $2)::date
 				),
 				0
 			),
@@ -64,13 +69,14 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 					JOIN sales s
 						ON s.id = si.sale_id
 					WHERE s.shop_id = $1
-					  AND (s.sold_at AT TIME ZONE 'Asia/Kolkata')::date =
-						  (NOW() AT TIME ZONE 'Asia/Kolkata')::date
+					  AND (s.sold_at AT TIME ZONE $2)::date =
+						  (NOW() AT TIME ZONE $2)::date
 				),
 				0
 			)
 		`,
 		shopID,
+		timezone,
 	).Scan(
 		&result.TotalInventoryQuantity,
 		&result.TodaySales,

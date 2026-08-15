@@ -38,20 +38,22 @@ func resolvePrincipal(ctx context.Context, db *pgxpool.Pool, claims Claims) (Pri
 	}
 
 	var shopID, shopName, currency, timezone string
+	var locationLabel *string
+	var latitude, longitude *float64
 	err = tx.QueryRow(ctx, `
-		SELECT id, name, currency, timezone
+		SELECT id, name, currency, timezone, location_label, latitude, longitude
 		FROM shops
 		WHERE owner_profile_id = $1 AND is_active = TRUE
 		ORDER BY created_at, id
 		LIMIT 1
-	`, profileID).Scan(&shopID, &shopName, &currency, &timezone)
+	`, profileID).Scan(&shopID, &shopName, &currency, &timezone, &locationLabel, &latitude, &longitude)
 	if errors.Is(err, pgx.ErrNoRows) {
 		shopName = defaultShopName(claims.Name)
 		err = tx.QueryRow(ctx, `
 			INSERT INTO shops (owner_profile_id, name)
 			VALUES ($1, $2)
-			RETURNING id, name, currency, timezone
-		`, profileID, shopName).Scan(&shopID, &shopName, &currency, &timezone)
+			RETURNING id, name, currency, timezone, location_label, latitude, longitude
+		`, profileID, shopName).Scan(&shopID, &shopName, &currency, &timezone, &locationLabel, &latitude, &longitude)
 	}
 	if err != nil {
 		return Principal{}, err
@@ -67,6 +69,9 @@ func resolvePrincipal(ctx context.Context, db *pgxpool.Pool, claims Claims) (Pri
 		ShopName:              shopName,
 		Currency:              currency,
 		Timezone:              timezone,
+		LocationLabel:         stringValue(locationLabel),
+		Latitude:              latitude,
+		Longitude:             longitude,
 		OnboardingCompletedAt: onboardingCompletedAt,
 	}, nil
 }

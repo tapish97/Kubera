@@ -17,6 +17,9 @@ type Principal struct {
 	ShopName              string     `json:"shop_name"`
 	Currency              string     `json:"currency"`
 	Timezone              string     `json:"timezone"`
+	LocationLabel         string     `json:"location_label"`
+	Latitude              *float64   `json:"latitude"`
+	Longitude             *float64   `json:"longitude"`
 	OnboardingCompletedAt *time.Time `json:"onboarding_completed_at"`
 }
 

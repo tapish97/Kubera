@@ -12,6 +12,9 @@ type Account = {
   shop_name: string;
   currency: string;
   timezone: string;
+  location_label: string;
+  latitude: number | null;
+  longitude: number | null;
   onboarding_completed_at: string | null;
 };
 
@@ -38,6 +41,9 @@ export default async function OnboardingPage({ params }: PageProps<"/[locale]/on
             shopName={account.shop_name}
             currency={account.currency}
             timezone={account.timezone}
+            locationLabel={account.location_label}
+            latitude={account.latitude}
+            longitude={account.longitude}
           />
         </div>
       </div>

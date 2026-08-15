@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { completeOnboarding, updateSettings } from "@/features/shop/actions";
 import { useTranslations } from "next-intl";
+import { LocationFields } from "@/components/LocationFields";
 
 type Props = {
   mode: "onboarding" | "settings";
@@ -11,6 +12,9 @@ type Props = {
   shopName: string;
   currency: string;
   timezone: string;
+  locationLabel?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export function ShopSettingsForm(props: Props) {
@@ -38,6 +42,10 @@ export function ShopSettingsForm(props: Props) {
     formData.set("shop_name", shopName);
     formData.set("currency", currency);
     formData.set("timezone", timezone);
+    const submitted = new FormData(event.currentTarget);
+    formData.set("location_label", String(submitted.get("location_label") ?? ""));
+    formData.set("latitude", String(submitted.get("latitude") ?? ""));
+    formData.set("longitude", String(submitted.get("longitude") ?? ""));
 
     const result = props.mode === "onboarding"
       ? await completeOnboarding(formData)
@@ -92,6 +100,8 @@ export function ShopSettingsForm(props: Props) {
           </select>
         </label>
       </div>
+
+      <LocationFields label={t("shopLocation")} hint={t("shopLocationHint")} currentLocationLabel={t("useCurrentLocation")} locatingLabel={t("locating")} coordinatesLabel={t("mapCoordinates")} locationLabel={props.locationLabel} latitude={props.latitude} longitude={props.longitude} />
 
       {error && <p role="alert" className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       {message && <p role="status" className="rounded-2xl bg-[#e5f1e9] px-4 py-3 text-sm font-semibold text-[#216148]">{message}</p>}

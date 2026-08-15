@@ -37,6 +37,9 @@ type QuickCreateBatchRequest struct {
 	SupplierName         string   `json:"supplier_name"`
 	Mark                 string   `json:"mark"`
 	Phone                string   `json:"phone"`
+	LocationLabel        string   `json:"location_label"`
+	Latitude             *float64 `json:"latitude"`
+	Longitude            *float64 `json:"longitude"`
 	Quality              *string  `json:"quality"`
 	Size                 string   `json:"size"`
 	Quantity             float64  `json:"quantity"`
@@ -59,9 +62,12 @@ type Batch struct {
 }
 
 type SupplierOption struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Mark string `json:"mark"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Mark          string   `json:"mark"`
+	LocationLabel string   `json:"location_label"`
+	Latitude      *float64 `json:"latitude"`
+	Longitude     *float64 `json:"longitude"`
 }
 type FruitOption struct {
 	ID          string           `json:"id"`
@@ -76,7 +82,7 @@ func (h *Handler) PurchaseOptions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	rows, err := h.db.Query(r.Context(), `SELECT f.id, f.name, f.default_unit, s.id, s.name, s.mark
+	rows, err := h.db.Query(r.Context(), `SELECT f.id, f.name, f.default_unit, s.id, s.name, s.mark, s.location_label, s.latitude, s.longitude
 		FROM fruits f LEFT JOIN inventory_batches ib ON ib.fruit_id = f.id AND ib.shop_id = f.shop_id
 		LEFT JOIN suppliers s ON s.id = ib.supplier_id AND s.shop_id = f.shop_id AND s.is_active = TRUE
 		WHERE f.shop_id = $1 AND f.is_active = TRUE ORDER BY lower(f.name), lower(s.mark)`, shopID)
@@ -90,8 +96,9 @@ func (h *Handler) PurchaseOptions(w http.ResponseWriter, r *http.Request) {
 	seen := make(map[string]bool)
 	for rows.Next() {
 		var fruitID, fruitName, unit string
-		var supplierID, supplierName, mark *string
-		if err := rows.Scan(&fruitID, &fruitName, &unit, &supplierID, &supplierName, &mark); err != nil {
+		var supplierID, supplierName, mark, locationLabel *string
+		var latitude, longitude *float64
+		if err := rows.Scan(&fruitID, &fruitName, &unit, &supplierID, &supplierName, &mark, &locationLabel, &latitude, &longitude); err != nil {
 			writeError(w, "could not load purchase choices", http.StatusInternalServerError)
 			return
 		}
@@ -102,7 +109,7 @@ func (h *Handler) PurchaseOptions(w http.ResponseWriter, r *http.Request) {
 			options = append(options, FruitOption{ID: fruitID, Name: fruitName, DefaultUnit: unit, Suppliers: make([]SupplierOption, 0)})
 		}
 		if supplierID != nil && !seen[fruitID+":"+*supplierID] {
-			options[position].Suppliers = append(options[position].Suppliers, SupplierOption{ID: *supplierID, Name: *supplierName, Mark: *mark})
+			options[position].Suppliers = append(options[position].Suppliers, SupplierOption{ID: *supplierID, Name: *supplierName, Mark: *mark, LocationLabel: stringValue(locationLabel), Latitude: latitude, Longitude: longitude})
 			seen[fruitID+":"+*supplierID] = true
 		}
 	}
@@ -238,6 +245,7 @@ func (h *Handler) CreateQuickBatch(w http.ResponseWriter, r *http.Request) {
 	req.FruitName = strings.Join(strings.Fields(req.FruitName), " ")
 	req.SupplierName = strings.Join(strings.Fields(req.SupplierName), " ")
 	req.Mark = strings.Join(strings.Fields(req.Mark), " ")
+	req.LocationLabel = strings.Join(strings.Fields(req.LocationLabel), " ")
 	req.Unit = strings.ToLower(strings.TrimSpace(req.Unit))
 	if req.Unit == "" {
 		req.Unit = "box"
@@ -252,6 +260,10 @@ func (h *Handler) CreateQuickBatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if len([]rune(req.FruitName)) > 80 || len([]rune(req.Mark)) > 80 || len([]rune(req.SupplierName)) > 120 {
 		writeError(w, "fruit or mark name is too long", http.StatusBadRequest)
+		return
+	}
+	if len([]rune(req.LocationLabel)) > 180 || (req.Latitude == nil) != (req.Longitude == nil) || (req.Latitude != nil && (*req.Latitude < -90 || *req.Latitude > 90 || *req.Longitude < -180 || *req.Longitude > 180)) {
+		writeError(w, "invalid mark location", http.StatusBadRequest)
 		return
 	}
 
@@ -287,7 +299,7 @@ func (h *Handler) CreateQuickBatch(w http.ResponseWriter, r *http.Request) {
 			if req.SupplierName == "" {
 				req.SupplierName = req.Mark
 			}
-			err = tx.QueryRow(r.Context(), `INSERT INTO suppliers (shop_id, name, mark, phone) VALUES ($1, $2, $3, NULLIF($4, '')) RETURNING id`, shopID, req.SupplierName, req.Mark, strings.TrimSpace(req.Phone)).Scan(&supplierID)
+			err = tx.QueryRow(r.Context(), `INSERT INTO suppliers (shop_id, name, mark, phone, location_label, latitude, longitude) VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7) RETURNING id`, shopID, req.SupplierName, req.Mark, strings.TrimSpace(req.Phone), req.LocationLabel, req.Latitude, req.Longitude).Scan(&supplierID)
 		} else if err == nil {
 			_, err = tx.Exec(r.Context(), `UPDATE suppliers SET is_active = TRUE WHERE id = $1`, supplierID)
 		}
@@ -312,6 +324,13 @@ func (h *Handler) CreateQuickBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, batch)
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
