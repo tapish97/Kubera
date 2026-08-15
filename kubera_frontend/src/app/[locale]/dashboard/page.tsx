@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { formatDate, formatMoney, formatQuantity } from "@/lib/format";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -25,12 +26,14 @@ async function loadShopData() {
     ]);
     return { account, summary, recentSales, connected: true };
   } catch (error) {
+	const detail = error instanceof Error ? error.message : "";
     return {
       account: null,
       summary: emptySummary,
       recentSales: [] as RecentSale[],
       connected: false,
       connectionError: error instanceof ApiError && error.status === 401 ? "shopSession" : "shopUnavailable",
+	  connectionDetail: detail,
     };
   }
 }
@@ -79,6 +82,7 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
           <div className="mx-5 -mt-3 rounded-2xl border border-[#ecd7ae] bg-[#fff8e8] px-4 py-3 text-sm text-[#75551c] shadow-sm">
             <p className="font-semibold">{t("connectingTitle")}</p>
             <p className="mt-0.5 text-xs leading-5 text-[#8a6a32]">{errors(data.connectionError ?? "shopUnavailable")}</p>
+			{data.connectionDetail && <p className="mt-1 text-[11px] leading-4 text-[#8a6a32]">{data.connectionDetail}</p>}
           </div>
         )}
 
@@ -106,16 +110,16 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
         <section aria-labelledby="actions-heading" className="px-5 pt-8">
           <h2 id="actions-heading" className="text-lg font-semibold tracking-tight">{t("quickActions")}</h2>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <button type="button" className="col-span-2 flex min-h-20 items-center justify-between rounded-[22px] bg-[#216148] px-5 text-left text-white shadow-[0_12px_30px_rgba(33,97,72,0.2)]">
+            <button type="button" disabled aria-label={`${t("addStock")}, ${common("comingSoon")}`} className="col-span-2 flex min-h-20 cursor-not-allowed items-center justify-between rounded-[22px] bg-[#216148]/65 px-5 text-left text-white">
               <span><span className="block text-base font-bold">{t("addStock")}</span><span className="mt-1 block text-xs text-white/65">{t("addStockHint")}</span></span><span className="grid h-10 w-10 place-items-center rounded-full bg-white/15"><DashboardIcon name="plus" /></span>
             </button>
-            <button type="button" className="flex min-h-24 flex-col justify-between rounded-[22px] bg-[#f1bb5d] p-4 text-left text-[#4e350d]"><DashboardIcon name="sale" className="h-6 w-6" /><span><span className="block font-bold">{t("recordSale")}</span><span className="mt-0.5 block text-xs text-[#6d501e]">{t("recordSaleHint")}</span></span></button>
-            <button type="button" className="flex min-h-24 flex-col justify-between rounded-[22px] border border-[#e7e1d5] bg-white p-4 text-left"><DashboardIcon name="inventory" className="h-6 w-6 text-[#216148]" /><span><span className="block font-bold">{t("inventoryAction")}</span><span className="mt-0.5 block text-xs text-[#777b73]">{t("inventoryHint")}</span></span></button>
+            <button type="button" disabled aria-label={`${t("recordSale")}, ${common("comingSoon")}`} className="flex min-h-24 cursor-not-allowed flex-col justify-between rounded-[22px] bg-[#f1bb5d]/60 p-4 text-left text-[#4e350d]"><DashboardIcon name="sale" className="h-6 w-6" /><span><span className="block font-bold">{t("recordSale")}</span><span className="mt-0.5 block text-xs text-[#6d501e]">{common("comingSoon")}</span></span></button>
+            <Link href={`/${locale}/fruits`} className="flex min-h-24 flex-col justify-between rounded-[22px] border border-[#b9d5c4] bg-white p-4 text-left shadow-[0_8px_20px_rgba(33,97,72,0.08)] active:scale-[0.98]"><DashboardIcon name="inventory" className="h-6 w-6 text-[#216148]" /><span><span className="block font-bold">{t("inventoryAction")}</span><span className="mt-0.5 block text-xs font-semibold text-[#216148]">{t("inventoryHint")} →</span></span></Link>
           </div>
         </section>
 
         <section aria-labelledby="recent-heading" className="px-5 pt-8">
-          <div className="flex items-center justify-between"><h2 id="recent-heading" className="text-lg font-semibold tracking-tight">{t("recentSales")}</h2><button type="button" className="flex items-center gap-1 text-xs font-bold text-[#216148]">{t("viewAll")} <DashboardIcon name="arrow" className="h-4 w-4" /></button></div>
+          <div className="flex items-center justify-between"><h2 id="recent-heading" className="text-lg font-semibold tracking-tight">{t("recentSales")}</h2><span className="text-xs font-bold text-[#8a8d84]">{common("comingSoon")}</span></div>
           <div className="mt-3 overflow-hidden rounded-[22px] border border-[#e7e1d5] bg-white">
             {data.recentSales.length === 0 ? (
               <div className="px-5 py-8 text-center"><div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-[#f1eee7] text-[#8a8d84]"><DashboardIcon name="sale" /></div><p className="mt-3 text-sm font-semibold">{t("noSales")}</p><p className="mt-1 text-xs text-[#8a8d84]">{t("noSalesHint")}</p></div>

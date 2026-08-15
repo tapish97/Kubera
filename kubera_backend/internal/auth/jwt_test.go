@@ -85,6 +85,31 @@ func TestVerifierRejectsExpiredToken(t *testing.T) {
 	}
 }
 
+func TestVerifierDoesNotInferIssuerFromBaseURL(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const keyID = "test-key"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{
+			"kid": keyID, "kty": "OKP", "alg": "EdDSA", "crv": "Ed25519", "x": base64.RawURLEncoding.EncodeToString(publicKey),
+		}}})
+	}))
+	defer server.Close()
+
+	verifier, err := newVerifier("https://auth-base.example", server.URL, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := signedToken(t, privateKey, keyID, map[string]any{
+		"sub": "auth-user-1", "iss": "https://issuer.example", "exp": time.Now().Add(time.Minute).Unix(),
+	})
+	if _, err := verifier.Verify(context.Background(), token); err != nil {
+		t.Fatalf("Verify() rejected a token signed by the configured JWKS: %v", err)
+	}
+}
+
 func TestDefaultShopName(t *testing.T) {
 	if got := defaultShopName(" Asha "); got != "Asha's Shop" {
 		t.Fatalf("defaultShopName() = %q", got)

@@ -48,11 +48,8 @@ func newVerifier(baseURL, jwksURL, issuer, audience string) (*verifier, error) {
 	if jwksURL == "" && baseURL != "" {
 		jwksURL = baseURL + "/.well-known/jwks.json"
 	}
-	if issuer == "" {
-		issuer = baseURL
-	}
-	if jwksURL == "" || issuer == "" {
-		return nil, errors.New("NEON_AUTH_BASE_URL or both NEON_AUTH_JWKS_URL and NEON_AUTH_ISSUER must be set")
+	if jwksURL == "" {
+		return nil, errors.New("NEON_AUTH_BASE_URL or NEON_AUTH_JWKS_URL must be set")
 	}
 	return &verifier{
 		jwksURL:  jwksURL,
@@ -107,7 +104,7 @@ func (v *verifier) Verify(ctx context.Context, rawToken string) (Claims, error) 
 	if payload.NotBefore != 0 && now.Add(30*time.Second).Before(time.Unix(payload.NotBefore, 0)) {
 		return Claims{}, errInvalidToken
 	}
-	if strings.TrimRight(payload.Issuer, "/") != v.issuer {
+	if v.issuer != "" && strings.TrimRight(payload.Issuer, "/") != v.issuer {
 		return Claims{}, errInvalidToken
 	}
 
