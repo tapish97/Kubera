@@ -1,6 +1,12 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
-import { getTranslations } from "next-intl/server";
+import { SellForm } from "@/features/sales/SellForm";
+import { apiFetch } from "@/lib/api";
+import { auth } from "@/lib/auth/server";
 
-export default async function NewSalePage({ params }: PageProps<"/[locale]/sales/new">) { const { locale } = await params; const t = await getTranslations({ locale, namespace: "QuickAdd" }); return <AppShell><div className="px-5 pt-[max(1.25rem,env(safe-area-inset-top))]"><PageHeader title={t("sell")} back/><div className="mt-8 rounded-[24px] border border-[#e7e1d5] bg-white p-6"><p className="font-bold">{t("setupTitle")}</p><p className="mt-2 text-sm leading-6 text-[#6f746d]">{t("sellSetup")}</p><Link href={`/${locale}/fruits`} className="mt-5 block min-h-12 rounded-2xl bg-[#216148] px-4 py-3 text-center font-bold text-white">{t("manageFruits")}</Link></div></div></AppShell>; }
+export const dynamic = "force-dynamic";
+type Batch = { batch_id: string; fruit: string; mark: string; quantity_remaining: number; unit: string };
+type Account = { currency: string };
+export default async function NewSalePage({ params }: PageProps<"/[locale]/sales/new">) { const { locale } = await params; const t = await getTranslations({ locale, namespace: "QuickAdd" }); const { data: session } = await auth.getSession(); if (!session?.user) redirect(`/${locale}/login`); const [batches, account] = await Promise.all([apiFetch<Batch[]>("/inventory"), apiFetch<Account>("/me")]); return <AppShell><div className="px-5 pt-[max(1.25rem,env(safe-area-inset-top))]"><PageHeader title={t("sell")} back/><p className="mt-2 text-sm text-[#6f746d]">{t("sellHint")}</p><section className="mt-6 rounded-[24px] border border-[#e7e1d5] bg-white p-5 shadow-sm"><SellForm locale={locale} currency={account.currency} batches={batches}/></section></div></AppShell>; }

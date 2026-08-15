@@ -78,6 +78,7 @@ func main() {
 		"POST /inventory/batches",
 		inventoryHandler.CreateBatch,
 	)
+	protectedMux.HandleFunc("POST /inventory/batches/quick", inventoryHandler.CreateQuickBatch)
 
 	protectedMux.HandleFunc(
 		"GET /inventory",

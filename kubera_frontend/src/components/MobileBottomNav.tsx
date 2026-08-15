@@ -8,9 +8,9 @@ import { QuickActionMenu } from "@/components/QuickActionMenu";
 
 const items = [
   { key: "home", icon: "home" as const, route: "dashboard" },
-  { key: "inventory", icon: "inventory" as const, route: "fruits" },
+  { key: "inventory", icon: "inventory" as const, route: "inventory" },
   { key: "add", icon: "plus" as const, primary: true },
-  { key: "sales", icon: "sale" as const },
+  { key: "sales", icon: "sale" as const, route: "sales" },
   { key: "more", icon: "more" as const, route: "more" },
 ];
 
