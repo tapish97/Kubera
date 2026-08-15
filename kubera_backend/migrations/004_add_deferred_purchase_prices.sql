@@ -1,0 +1,2 @@
+ALTER TABLE sale_items
+    ADD COLUMN IF NOT EXISTS cost_price_is_estimated BOOLEAN NOT NULL DEFAULT FALSE;

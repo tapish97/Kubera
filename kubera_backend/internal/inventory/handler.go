@@ -76,6 +76,10 @@ type FruitOption struct {
 	Suppliers   []SupplierOption `json:"suppliers"`
 }
 
+type SetPurchasePriceRequest struct {
+	PurchasePricePerUnit *float64 `json:"purchase_price_per_unit"`
+}
+
 func (h *Handler) PurchaseOptions(w http.ResponseWriter, r *http.Request) {
 	shopID, ok := auth.ShopIDFromContext(r.Context())
 	if !ok {
@@ -254,7 +258,7 @@ func (h *Handler) CreateQuickBatch(w http.ResponseWriter, r *http.Request) {
 		req.Size = "normal"
 	}
 	validUnit := map[string]bool{"box": true, "kg": true, "piece": true, "crate": true, "dozen": true}
-	if req.Quantity <= 0 || req.PurchasePricePerUnit == nil || *req.PurchasePricePerUnit < 0 || !validUnit[req.Unit] || (req.FruitID == "" && req.FruitName == "") || (req.SupplierID == "" && req.Mark == "") {
+	if req.Quantity <= 0 || (req.PurchasePricePerUnit != nil && *req.PurchasePricePerUnit < 0) || !validUnit[req.Unit] || (req.FruitID == "" && req.FruitName == "") || (req.SupplierID == "" && req.Mark == "") {
 		writeError(w, "fruit, mark, quantity, unit, and buy price are required", http.StatusBadRequest)
 		return
 	}
@@ -410,6 +414,74 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (h *Handler) ListUnpriced(w http.ResponseWriter, r *http.Request) {
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	rows, err := h.db.Query(r.Context(), `SELECT ib.id, f.name, s.mark, ib.quality, ib.size, ib.unit, ib.quantity_received, ib.quantity_remaining, ib.received_at,
+		COALESCE(SUM(si.quantity),0), CASE WHEN COALESCE(SUM(si.quantity),0)>0 THEN (SUM(si.total_sale_amount)/SUM(si.quantity))*0.94 ELSE NULL END
+		FROM inventory_batches ib JOIN fruits f ON f.id=ib.fruit_id JOIN suppliers s ON s.id=ib.supplier_id LEFT JOIN sale_items si ON si.batch_id=ib.id
+		WHERE ib.shop_id=$1 AND ib.purchase_price_per_unit IS NULL
+		GROUP BY ib.id,f.name,s.mark,ib.quality,ib.size,ib.unit,ib.quantity_received,ib.quantity_remaining,ib.received_at ORDER BY ib.received_at DESC`, shopID)
+	if err != nil {
+		writeError(w, "could not load unsettled prices", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	items := make([]map[string]any, 0)
+	for rows.Next() {
+		var id, fruit, mark, size, unit string
+		var quality *string
+		var receivedAt time.Time
+		var received, remaining, sold float64
+		var suggested *float64
+		if err := rows.Scan(&id, &fruit, &mark, &quality, &size, &unit, &received, &remaining, &receivedAt, &sold, &suggested); err != nil {
+			writeError(w, "could not load unsettled prices", http.StatusInternalServerError)
+			return
+		}
+		items = append(items, map[string]any{"batch_id": id, "fruit": fruit, "mark": mark, "quality": quality, "size": size, "unit": unit, "quantity_received": received, "quantity_remaining": remaining, "quantity_sold": sold, "received_at": receivedAt, "suggested_purchase_price_per_unit": suggested})
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (h *Handler) SetPurchasePrice(w http.ResponseWriter, r *http.Request) {
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	var req SetPurchasePriceRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil || req.PurchasePricePerUnit == nil || *req.PurchasePricePerUnit < 0 {
+		writeError(w, "valid buying price is required", http.StatusBadRequest)
+		return
+	}
+	tx, err := h.db.BeginTx(r.Context(), pgx.TxOptions{})
+	if err != nil {
+		writeError(w, "could not start price settlement", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	command, err := tx.Exec(r.Context(), `UPDATE inventory_batches SET purchase_price_per_unit=$1 WHERE id=$2 AND shop_id=$3`, *req.PurchasePricePerUnit, r.PathValue("id"), shopID)
+	if err != nil || command.RowsAffected() != 1 {
+		writeError(w, "batch not found", http.StatusNotFound)
+		return
+	}
+	_, err = tx.Exec(r.Context(), `UPDATE sale_items si SET cost_price_per_unit=$1, cost_price_is_estimated=FALSE FROM sales s WHERE si.sale_id=s.id AND si.batch_id=$2 AND s.shop_id=$3`, *req.PurchasePricePerUnit, r.PathValue("id"), shopID)
+	if err != nil {
+		writeError(w, "could not update past sale profits", http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, "could not save buying price", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "settled"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

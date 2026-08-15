@@ -39,7 +39,8 @@ export default async function ShopPage({ params, searchParams }: { params: Promi
       </div>
     </section>
 
-    <Link href={`/${locale}/suppliers`} className="mt-4 flex min-h-16 items-center justify-between rounded-[22px] border border-[#dce6df] bg-[#edf4ef] px-5 font-bold text-[#173f31]"><span>Marks & suppliers<small className="mt-1 block font-normal text-[#648072]">Edit farmer, phone, notes and origin</small></span><span>→</span></Link>
+    <Link href={`/${locale}/settlements`} className="mt-4 flex min-h-16 items-center justify-between rounded-[22px] border border-[#ecd7ae] bg-[#fff8e8] px-5 font-bold text-[#5f4519]"><span>Buying prices<small className="mt-1 block font-normal text-[#8a6a32]">Settle stock added without a price</small></span><span>→</span></Link>
+    <Link href={`/${locale}/suppliers`} className="mt-3 flex min-h-16 items-center justify-between rounded-[22px] border border-[#dce6df] bg-[#edf4ef] px-5 font-bold text-[#173f31]"><span>Marks & suppliers<small className="mt-1 block font-normal text-[#648072]">Edit farmer, phone, notes and origin</small></span><span>→</span></Link>
     <section className="mt-4 rounded-[26px] border border-[#e7e1d5] bg-white p-5 shadow-[0_12px_35px_rgba(44,53,43,0.06)]"><h2 className="mb-5 text-lg font-bold">Shop settings</h2><ShopSettingsForm mode="settings" profileName={account.profile_name} shopName={account.shop_name} currency={account.currency} timezone={account.timezone} locationLabel={account.location_label} latitude={account.latitude} longitude={account.longitude} /></section>
   </div></AppShell>;
 }

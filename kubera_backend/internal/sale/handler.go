@@ -30,13 +30,14 @@ type CreateSaleRequest struct {
 }
 
 type SaleItemResponse struct {
-	ID                  string  `json:"id"`
-	BatchID             string  `json:"batch_id"`
-	Quantity            float64 `json:"quantity"`
-	CostPricePerUnit    float64 `json:"cost_price_per_unit"`
-	SellingPricePerUnit float64 `json:"selling_price_per_unit"`
-	TotalSaleAmount     float64 `json:"total_sale_amount"`
-	GrossProfit         float64 `json:"gross_profit"`
+	ID                   string  `json:"id"`
+	BatchID              string  `json:"batch_id"`
+	Quantity             float64 `json:"quantity"`
+	CostPricePerUnit     float64 `json:"cost_price_per_unit"`
+	SellingPricePerUnit  float64 `json:"selling_price_per_unit"`
+	TotalSaleAmount      float64 `json:"total_sale_amount"`
+	GrossProfit          float64 `json:"gross_profit"`
+	CostPriceIsEstimated bool    `json:"cost_price_is_estimated"`
 }
 
 type SaleResponse struct {
@@ -167,13 +168,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if costPrice == nil {
-			writeError(
-				w,
-				"batch does not have a purchase price",
-				http.StatusBadRequest,
-			)
-			return
+		costIsEstimated := costPrice == nil
+		resolvedCost := item.SellingPricePerUnit * 0.94
+		if costPrice != nil {
+			resolvedCost = *costPrice
 		}
 
 		var saleItem SaleItemResponse
@@ -186,9 +184,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 				batch_id,
 				quantity,
 				cost_price_per_unit,
-				selling_price_per_unit
+				selling_price_per_unit,
+				cost_price_is_estimated
 			)
-			VALUES ($1, $2, $3, $4, $5)
+			VALUES ($1, $2, $3, $4, $5, $6)
 			RETURNING
 				id,
 				batch_id,
@@ -197,12 +196,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 				selling_price_per_unit,
 				total_sale_amount,
 				gross_profit
+				, cost_price_is_estimated
 			`,
 			saleID,
 			item.BatchID,
 			item.Quantity,
-			*costPrice,
+			resolvedCost,
 			item.SellingPricePerUnit,
+			costIsEstimated,
 		).Scan(
 			&saleItem.ID,
 			&saleItem.BatchID,
@@ -211,6 +212,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			&saleItem.SellingPricePerUnit,
 			&saleItem.TotalSaleAmount,
 			&saleItem.GrossProfit,
+			&saleItem.CostPriceIsEstimated,
 		)
 
 		if err != nil {
@@ -269,6 +271,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			si.selling_price_per_unit,
 			si.total_sale_amount,
 			si.gross_profit
+			, si.cost_price_is_estimated
 		FROM sales s
 
 		JOIN sale_items si
@@ -298,19 +301,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type SaleHistoryItem struct {
-		SaleID              string  `json:"sale_id"`
-		SoldAt              any     `json:"sold_at"`
-		Fruit               string  `json:"fruit"`
-		Supplier            string  `json:"supplier"`
-		Mark                string  `json:"mark"`
-		Quality             *string `json:"quality"`
-		Size                string  `json:"size"`
-		Quantity            float64 `json:"quantity"`
-		Unit                string  `json:"unit"`
-		CostPricePerUnit    float64 `json:"cost_price_per_unit"`
-		SellingPricePerUnit float64 `json:"selling_price_per_unit"`
-		TotalSaleAmount     float64 `json:"total_sale_amount"`
-		GrossProfit         float64 `json:"gross_profit"`
+		SaleID               string  `json:"sale_id"`
+		SoldAt               any     `json:"sold_at"`
+		Fruit                string  `json:"fruit"`
+		Supplier             string  `json:"supplier"`
+		Mark                 string  `json:"mark"`
+		Quality              *string `json:"quality"`
+		Size                 string  `json:"size"`
+		Quantity             float64 `json:"quantity"`
+		Unit                 string  `json:"unit"`
+		CostPricePerUnit     float64 `json:"cost_price_per_unit"`
+		SellingPricePerUnit  float64 `json:"selling_price_per_unit"`
+		TotalSaleAmount      float64 `json:"total_sale_amount"`
+		GrossProfit          float64 `json:"gross_profit"`
+		CostPriceIsEstimated bool    `json:"cost_price_is_estimated"`
 	}
 
 	results := make([]SaleHistoryItem, 0)
@@ -332,6 +336,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			&item.SellingPricePerUnit,
 			&item.TotalSaleAmount,
 			&item.GrossProfit,
+			&item.CostPriceIsEstimated,
 		)
 
 		if err != nil {

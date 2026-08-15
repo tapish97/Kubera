@@ -153,7 +153,6 @@ export function BuyStockForm({
           type="number"
           min="0"
           step="0.01"
-          required
           className={input}
         />
       </label>
@@ -194,7 +193,7 @@ export function BuyStockForm({
           {t("total")}
         </p>
         <p className="mt-1 text-2xl font-bold text-[#173f31]">
-          {formatMoney(Number.isFinite(total) ? total : 0, locale, currency)}
+          {price === "" ? t("priceLater") : formatMoney(Number.isFinite(total) ? total : 0, locale, currency)}
         </p>
       </div>
       {error && <StatusBanner tone="error" title={error} />}

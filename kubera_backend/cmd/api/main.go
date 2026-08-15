@@ -91,6 +91,8 @@ func main() {
 	)
 	protectedMux.HandleFunc("POST /inventory/batches/quick", inventoryHandler.CreateQuickBatch)
 	protectedMux.HandleFunc("GET /purchase-options", inventoryHandler.PurchaseOptions)
+	protectedMux.HandleFunc("GET /inventory/unpriced", inventoryHandler.ListUnpriced)
+	protectedMux.HandleFunc("PATCH /inventory/batches/{id}/purchase-price", inventoryHandler.SetPurchasePrice)
 
 	protectedMux.HandleFunc(
 		"GET /inventory",
