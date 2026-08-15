@@ -38,12 +38,14 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type Report struct {
-		Date              string  `json:"date"`
-		StockBatchesAdded int     `json:"stock_batches_added"`
-		PurchaseValue     float64 `json:"purchase_value"`
-		SaleCount         int     `json:"sale_count"`
-		SalesRevenue      float64 `json:"sales_revenue"`
-		GrossProfit       float64 `json:"gross_profit"`
+		Date                   string  `json:"date"`
+		StockBatchesAdded      int     `json:"stock_batches_added"`
+		PurchaseValue          float64 `json:"purchase_value"`
+		SaleCount              int     `json:"sale_count"`
+		SalesRevenue           float64 `json:"sales_revenue"`
+		GrossProfit            float64 `json:"gross_profit"`
+		EstimatedSaleItemCount int     `json:"estimated_sale_item_count"`
+		UnpricedBatchCount     int     `json:"unpriced_batch_count"`
 	}
 	result := Report{Date: reportDate}
 	err = h.db.QueryRow(r.Context(), `SELECT
@@ -51,13 +53,29 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 		COALESCE((SELECT SUM(quantity_received * COALESCE(purchase_price_per_unit,0)) FROM inventory_batches WHERE shop_id=$1 AND (received_at AT TIME ZONE $2)::date=$3::date),0),
 		(SELECT COUNT(*) FROM sales WHERE shop_id=$1 AND (sold_at AT TIME ZONE $2)::date=$3::date),
 		COALESCE((SELECT SUM(si.total_sale_amount) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date),0),
-		COALESCE((SELECT SUM(si.gross_profit) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date),0)`, principal.ShopID, timezone, reportDate).
-		Scan(&result.StockBatchesAdded, &result.PurchaseValue, &result.SaleCount, &result.SalesRevenue, &result.GrossProfit)
+		COALESCE((SELECT SUM(si.gross_profit) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date),0),
+		(SELECT COUNT(*) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date AND si.cost_price_is_estimated),
+		(SELECT COUNT(DISTINCT ib.id) FROM inventory_batches ib LEFT JOIN sale_items si ON si.batch_id=ib.id LEFT JOIN sales s ON s.id=si.sale_id WHERE ib.shop_id=$1 AND ib.purchase_price_per_unit IS NULL AND ((ib.received_at AT TIME ZONE $2)::date=$3::date OR (s.sold_at AT TIME ZONE $2)::date=$3::date))`, principal.ShopID, timezone, reportDate).
+		Scan(&result.StockBatchesAdded, &result.PurchaseValue, &result.SaleCount, &result.SalesRevenue, &result.GrossProfit, &result.EstimatedSaleItemCount, &result.UnpricedBatchCount)
 	if err != nil {
 		writeError(w, "could not load daily report", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) NotificationSummary(w http.ResponseWriter, r *http.Request) {
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	var count int
+	if err := h.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM inventory_batches WHERE shop_id=$1 AND purchase_price_per_unit IS NULL`, shopID).Scan(&count); err != nil {
+		writeError(w, "could not load notifications", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"unpriced_batch_count": count})
 }
 
 func NewHandler(db *pgxpool.Pool) *Handler {

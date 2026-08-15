@@ -15,6 +15,7 @@ type Props = {
   locationLabel?: string;
   latitude?: number | null;
   longitude?: number | null;
+  preferredLocale?: string;
 };
 
 export function ShopSettingsForm(props: Props) {
@@ -27,6 +28,7 @@ export function ShopSettingsForm(props: Props) {
   const [shopName, setShopName] = useState(props.shopName);
   const [currency, setCurrency] = useState(props.currency || "INR");
   const [timezone, setTimezone] = useState(props.timezone || "Asia/Kolkata");
+  const [preferredLocale, setPreferredLocale] = useState(props.preferredLocale || locale);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -42,6 +44,7 @@ export function ShopSettingsForm(props: Props) {
     formData.set("shop_name", shopName);
     formData.set("currency", currency);
     formData.set("timezone", timezone);
+    formData.set("preferred_locale", preferredLocale);
     const submitted = new FormData(event.currentTarget);
     formData.set("location_label", String(submitted.get("location_label") ?? ""));
     formData.set("latitude", String(submitted.get("latitude") ?? ""));
@@ -58,13 +61,14 @@ export function ShopSettingsForm(props: Props) {
     }
 
     if (props.mode === "onboarding") {
-      router.replace(`/${locale}/dashboard`);
+      router.replace(`/${preferredLocale}/dashboard`);
       return;
     }
 
     setMessage(settings("saved"));
     setLoading(false);
-    router.refresh();
+    if (preferredLocale !== locale) router.replace(`/${preferredLocale}/shop?tab=settings`);
+    else router.refresh();
   }
 
   const inputClass = "mt-2 min-h-13 w-full rounded-2xl border border-[#ded9cf] bg-white px-4 text-base outline-none transition focus:border-[#216148] focus:ring-4 focus:ring-[#216148]/10";
@@ -100,6 +104,14 @@ export function ShopSettingsForm(props: Props) {
           </select>
         </label>
       </div>
+
+      <label className="block text-sm font-semibold text-[#3d433d]">
+        {settings("defaultLanguage")}
+        <select className={inputClass} value={preferredLocale} onChange={(event) => setPreferredLocale(event.target.value)}>
+          <option value="en">English</option><option value="hi">हिन्दी</option><option value="mr">मराठी</option>
+        </select>
+        <span className="mt-1.5 block text-xs font-normal text-[#747970]">{settings("defaultLanguageHint")}</span>
+      </label>
 
       <LocationFields label={t("shopLocation")} hint={t("shopLocationHint")} currentLocationLabel={t("useCurrentLocation")} locatingLabel={t("locating")} coordinatesLabel={t("mapCoordinates")} locationLabel={props.locationLabel} latitude={props.latitude} longitude={props.longitude} />
 

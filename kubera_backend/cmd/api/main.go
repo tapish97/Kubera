@@ -93,6 +93,7 @@ func main() {
 	protectedMux.HandleFunc("GET /purchase-options", inventoryHandler.PurchaseOptions)
 	protectedMux.HandleFunc("GET /inventory/unpriced", inventoryHandler.ListUnpriced)
 	protectedMux.HandleFunc("PATCH /inventory/batches/{id}/purchase-price", inventoryHandler.SetPurchasePrice)
+	protectedMux.HandleFunc("PATCH /inventory/batches/{id}", inventoryHandler.UpdateBatch)
 
 	protectedMux.HandleFunc(
 		"GET /inventory",
@@ -120,6 +121,7 @@ func main() {
 		dashboardHandler.Summary,
 	)
 	protectedMux.HandleFunc("GET /reports/daily", dashboardHandler.DailyReport)
+	protectedMux.HandleFunc("GET /notifications/summary", dashboardHandler.NotificationSummary)
 
 	protectedMux.HandleFunc(
 		"GET /dashboard/recent-sales",

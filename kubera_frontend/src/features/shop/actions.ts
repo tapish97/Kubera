@@ -21,6 +21,7 @@ export async function completeOnboarding(formData: FormData): Promise<ShopAction
       method: "POST",
       body: JSON.stringify({
         profile_name: value(formData, "profile_name"),
+        preferred_locale: value(formData, "preferred_locale"),
         shop_name: value(formData, "shop_name"),
         currency: value(formData, "currency"),
         timezone: value(formData, "timezone"),
@@ -42,7 +43,7 @@ export async function updateSettings(formData: FormData): Promise<ShopActionResu
   try {
     await apiFetch("/me/profile", {
       method: "PATCH",
-      body: JSON.stringify({ name: value(formData, "profile_name") }),
+      body: JSON.stringify({ name: value(formData, "profile_name"), preferred_locale: value(formData, "preferred_locale") }),
     });
     await apiFetch("/me/shop", {
       method: "PATCH",

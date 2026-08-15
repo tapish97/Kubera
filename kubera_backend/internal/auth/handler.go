@@ -21,17 +21,19 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type onboardingRequest struct {
-	ProfileName   string   `json:"profile_name"`
-	ShopName      string   `json:"shop_name"`
-	Currency      string   `json:"currency"`
-	Timezone      string   `json:"timezone"`
-	LocationLabel string   `json:"location_label"`
-	Latitude      *float64 `json:"latitude"`
-	Longitude     *float64 `json:"longitude"`
+	ProfileName     string   `json:"profile_name"`
+	PreferredLocale string   `json:"preferred_locale"`
+	ShopName        string   `json:"shop_name"`
+	Currency        string   `json:"currency"`
+	Timezone        string   `json:"timezone"`
+	LocationLabel   string   `json:"location_label"`
+	Latitude        *float64 `json:"latitude"`
+	Longitude       *float64 `json:"longitude"`
 }
 
 type profileRequest struct {
-	Name string `json:"name"`
+	Name            string `json:"name"`
+	PreferredLocale string `json:"preferred_locale"`
 }
 
 type shopRequest struct {
@@ -64,6 +66,7 @@ func (h *Handler) CompleteOnboarding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.ProfileName = strings.TrimSpace(req.ProfileName)
+	req.PreferredLocale = normalizeLocale(req.PreferredLocale)
 	req.ShopName = strings.TrimSpace(req.ShopName)
 	req.Currency = strings.ToUpper(strings.TrimSpace(req.Currency))
 	req.Timezone = strings.TrimSpace(req.Timezone)
@@ -86,11 +89,11 @@ func (h *Handler) CompleteOnboarding(w http.ResponseWriter, r *http.Request) {
 
 	_, err = tx.Exec(r.Context(), `
 		UPDATE user_profiles
-		SET name = $1,
+		SET name = $1, preferred_locale = $2,
 			onboarding_completed_at = COALESCE(onboarding_completed_at, NOW()),
 			updated_at = NOW()
-		WHERE id = $2
-	`, req.ProfileName, principal.ProfileID)
+		WHERE id = $3
+	`, req.ProfileName, req.PreferredLocale, principal.ProfileID)
 	if err == nil {
 		_, err = tx.Exec(r.Context(), `
 			UPDATE shops
@@ -109,6 +112,7 @@ func (h *Handler) CompleteOnboarding(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	principal.ProfileName = req.ProfileName
+	principal.PreferredLocale = req.PreferredLocale
 	principal.ShopName = req.ShopName
 	principal.Currency = req.Currency
 	principal.Timezone = req.Timezone
@@ -130,18 +134,20 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
+	req.PreferredLocale = normalizeLocale(req.PreferredLocale)
 	if len(req.Name) < 2 || len(req.Name) > 100 {
 		writeAuthError(w, "name must be between 2 and 100 characters", http.StatusBadRequest)
 		return
 	}
 	_, err := h.db.Exec(r.Context(), `
-		UPDATE user_profiles SET name = $1, updated_at = NOW() WHERE id = $2
-	`, req.Name, principal.ProfileID)
+		UPDATE user_profiles SET name = $1, preferred_locale = $2, updated_at = NOW() WHERE id = $3
+	`, req.Name, req.PreferredLocale, principal.ProfileID)
 	if err != nil {
 		writeAuthError(w, "could not update profile", http.StatusInternalServerError)
 		return
 	}
 	principal.ProfileName = req.Name
+	principal.PreferredLocale = req.PreferredLocale
 	writeAuthJSON(w, http.StatusOK, principal)
 }
 
@@ -216,6 +222,17 @@ func validateLocation(label string, latitude, longitude *float64) string {
 		return "invalid location coordinates"
 	}
 	return ""
+}
+
+func normalizeLocale(locale string) string {
+	switch strings.ToLower(strings.TrimSpace(locale)) {
+	case "hi":
+		return "hi"
+	case "mr":
+		return "mr"
+	default:
+		return "en"
+	}
 }
 
 func decodeAuthJSON(w http.ResponseWriter, r *http.Request, target any) bool {

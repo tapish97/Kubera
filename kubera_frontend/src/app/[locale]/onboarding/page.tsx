@@ -16,6 +16,7 @@ type Account = {
   latitude: number | null;
   longitude: number | null;
   onboarding_completed_at: string | null;
+  preferred_locale: string;
 };
 
 export default async function OnboardingPage({ params }: PageProps<"/[locale]/onboarding">) {
@@ -44,6 +45,7 @@ export default async function OnboardingPage({ params }: PageProps<"/[locale]/on
             locationLabel={account.location_label}
             latitude={account.latitude}
             longitude={account.longitude}
+            preferredLocale={account.preferred_locale || locale}
           />
         </div>
       </div>

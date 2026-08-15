@@ -25,14 +25,15 @@ func resolvePrincipal(ctx context.Context, db *pgxpool.Pool, claims Claims) (Pri
 
 	var profileID string
 	var profileName *string
+	var preferredLocale string
 	var onboardingCompletedAt *time.Time
 	err = tx.QueryRow(ctx, `
 		INSERT INTO user_profiles (auth_user_id, name)
 		VALUES ($1, NULLIF($2, ''))
 		ON CONFLICT (auth_user_id) DO UPDATE
 		SET name = COALESCE(user_profiles.name, EXCLUDED.name)
-		RETURNING id, name, onboarding_completed_at
-	`, claims.Subject, strings.TrimSpace(claims.Name)).Scan(&profileID, &profileName, &onboardingCompletedAt)
+		RETURNING id, name, preferred_locale, onboarding_completed_at
+	`, claims.Subject, strings.TrimSpace(claims.Name)).Scan(&profileID, &profileName, &preferredLocale, &onboardingCompletedAt)
 	if err != nil {
 		return Principal{}, err
 	}
@@ -65,6 +66,7 @@ func resolvePrincipal(ctx context.Context, db *pgxpool.Pool, claims Claims) (Pri
 		AuthUserID:            claims.Subject,
 		ProfileID:             profileID,
 		ProfileName:           stringValue(profileName),
+		PreferredLocale:       preferredLocale,
 		ShopID:                shopID,
 		ShopName:              shopName,
 		Currency:              currency,

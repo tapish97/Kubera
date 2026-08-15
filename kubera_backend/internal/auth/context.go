@@ -13,6 +13,7 @@ type Principal struct {
 	AuthUserID            string     `json:"auth_user_id"`
 	ProfileID             string     `json:"profile_id"`
 	ProfileName           string     `json:"profile_name"`
+	PreferredLocale       string     `json:"preferred_locale"`
 	ShopID                string     `json:"shop_id"`
 	ShopName              string     `json:"shop_name"`
 	Currency              string     `json:"currency"`

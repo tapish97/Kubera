@@ -33,7 +33,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.replace(`/${locale}/dashboard`);
+      router.replace(`/${result.locale || locale}/dashboard`);
     } catch {
       setError(t("connectError"));
     } finally {

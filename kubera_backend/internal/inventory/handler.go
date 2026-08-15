@@ -80,6 +80,13 @@ type SetPurchasePriceRequest struct {
 	PurchasePricePerUnit *float64 `json:"purchase_price_per_unit"`
 }
 
+type UpdateBatchRequest struct {
+	Quality              string   `json:"quality"`
+	Size                 string   `json:"size"`
+	QuantityRemaining    float64  `json:"quantity_remaining"`
+	PurchasePricePerUnit *float64 `json:"purchase_price_per_unit"`
+}
+
 func (h *Handler) PurchaseOptions(w http.ResponseWriter, r *http.Request) {
 	shopID, ok := auth.ShopIDFromContext(r.Context())
 	if !ok {
@@ -482,6 +489,87 @@ func (h *Handler) SetPurchasePrice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "settled"})
+}
+
+func (h *Handler) UpdateBatch(w http.ResponseWriter, r *http.Request) {
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	var req UpdateBatchRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	req.Quality = strings.TrimSpace(req.Quality)
+	req.Size = strings.ToLower(strings.TrimSpace(req.Size))
+	if req.Size == "" {
+		req.Size = "normal"
+	}
+	if req.QuantityRemaining < 0 || (req.PurchasePricePerUnit != nil && *req.PurchasePricePerUnit < 0) || len([]rune(req.Quality)) > 80 || !map[string]bool{"small": true, "normal": true, "large": true}[req.Size] {
+		writeError(w, "invalid stock details", http.StatusBadRequest)
+		return
+	}
+	tx, err := h.db.BeginTx(r.Context(), pgx.TxOptions{})
+	if err != nil {
+		writeError(w, "could not start stock update", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	var current, received float64
+	err = tx.QueryRow(r.Context(), `SELECT quantity_remaining, quantity_received FROM inventory_batches WHERE id=$1 AND shop_id=$2 FOR UPDATE`, r.PathValue("id"), shopID).Scan(&current, &received)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, "batch not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		writeError(w, "could not load batch", http.StatusInternalServerError)
+		return
+	}
+	if req.QuantityRemaining > received {
+		writeError(w, "remaining quantity cannot exceed quantity received", http.StatusBadRequest)
+		return
+	}
+	difference := req.QuantityRemaining - current
+	if difference != 0 {
+		adjustmentType := "correction_increase"
+		quantity := difference
+		if difference < 0 {
+			adjustmentType = "correction_decrease"
+			quantity = -difference
+		}
+		_, err = tx.Exec(r.Context(), `INSERT INTO inventory_adjustments (shop_id,batch_id,adjustment_type,quantity,reason) VALUES ($1,$2,$3,$4,'Manual inventory edit')`, shopID, r.PathValue("id"), adjustmentType, quantity)
+		if err != nil {
+			writeError(w, "could not record stock correction", http.StatusInternalServerError)
+			return
+		}
+	}
+	_, err = tx.Exec(r.Context(), `UPDATE inventory_batches SET quality=NULLIF($1,''), size=$2, quantity_remaining=$3, purchase_price_per_unit=$4 WHERE id=$5 AND shop_id=$6`, req.Quality, req.Size, req.QuantityRemaining, req.PurchasePricePerUnit, r.PathValue("id"), shopID)
+	if err != nil {
+		writeError(w, "could not update stock", http.StatusInternalServerError)
+		return
+	}
+	if req.PurchasePricePerUnit != nil {
+		_, err = tx.Exec(r.Context(), `UPDATE sale_items si SET cost_price_per_unit=$1,cost_price_is_estimated=FALSE FROM sales s WHERE si.sale_id=s.id AND si.batch_id=$2 AND s.shop_id=$3`, *req.PurchasePricePerUnit, r.PathValue("id"), shopID)
+		if err != nil {
+			writeError(w, "could not update sale profits", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		_, err = tx.Exec(r.Context(), `UPDATE sale_items si SET cost_price_per_unit=si.selling_price_per_unit*0.94,cost_price_is_estimated=TRUE FROM sales s WHERE si.sale_id=s.id AND si.batch_id=$1 AND s.shop_id=$2`, r.PathValue("id"), shopID)
+		if err != nil {
+			writeError(w, "could not update provisional sale profits", http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, "could not save stock", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
