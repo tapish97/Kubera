@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 
 const items = [
   { key: "home", icon: "home" as const, route: "dashboard" },
-  { key: "inventory", icon: "inventory" as const },
+  { key: "inventory", icon: "inventory" as const, route: "fruits" },
   { key: "add", icon: "plus" as const, primary: true },
   { key: "sales", icon: "sale" as const },
   { key: "more", icon: "more" as const, route: "more" },

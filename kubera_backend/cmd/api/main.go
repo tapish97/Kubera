@@ -65,6 +65,9 @@ func main() {
 
 	protectedMux.HandleFunc("POST /fruits", fruitHandler.Create)
 	protectedMux.HandleFunc("GET /fruits", fruitHandler.List)
+	protectedMux.HandleFunc("GET /fruits/{id}", fruitHandler.Get)
+	protectedMux.HandleFunc("PATCH /fruits/{id}", fruitHandler.Update)
+	protectedMux.HandleFunc("PATCH /fruits/{id}/status", fruitHandler.SetStatus)
 
 	// Suppliers / Marks
 	protectedMux.HandleFunc("POST /suppliers", supplierHandler.Create)
