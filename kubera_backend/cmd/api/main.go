@@ -120,6 +120,7 @@ func main() {
 		"GET /dashboard/summary",
 		dashboardHandler.Summary,
 	)
+	protectedMux.HandleFunc("GET /dashboard", dashboardHandler.Combined)
 	protectedMux.HandleFunc("GET /reports/daily", dashboardHandler.DailyReport)
 	protectedMux.HandleFunc("POST /closings/{date}", dashboardHandler.CloseDay)
 	protectedMux.HandleFunc("GET /closings", dashboardHandler.ClosingHistory)
@@ -140,7 +141,7 @@ func main() {
 		dashboardHandler.StockBySupplier,
 	)
 
-	mux.Handle("/", authMiddleware.Protect(protectedMux))
+	mux.Handle("/", requestlog.Middleware(logger, nil, authMiddleware.Protect(protectedMux)))
 
 	port := os.Getenv("PORT")
 

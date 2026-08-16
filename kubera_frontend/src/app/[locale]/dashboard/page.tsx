@@ -11,11 +11,18 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-type CurrentAccount = { profile_id: string; shop_id: string; shop_name: string; currency: string; onboarding_completed_at: string | null };
+type CurrentAccount = { profile_id: string; shop_id: string; shop_name: string; currency: string; preferred_locale: string; onboarding_completed_at: string | null };
 type Summary = { total_inventory_quantity: number; today_sales: number; today_gross_profit: number };
 type RecentSale = { sale_id:string; sold_at:string; received_at:string; fruit:string; mark:string; quantity:number; unit:string; total_sale_amount:number };
 type InventoryItem = { batch_id:string; fruit:string; mark:string; quality:string|null; size:string; quantity_remaining:number; unit:string; received_at:string };
 type StockHighlight = { batchId:string; label:string; mark:string; quantity:number; unit:string; receivedAt:string };
+type DashboardPayload = {
+  account: CurrentAccount;
+  summary: Summary;
+  inventory: InventoryItem[];
+  recent_sales: RecentSale[];
+  notifications: { unpriced_batch_count: number };
+};
 
 const emptySummary: Summary = { total_inventory_quantity: 0, today_sales: 0, today_gross_profit: 0 };
 function ageDays(value:string){return Math.max(0,Math.floor((Date.now()-new Date(value).getTime())/86400000));}
@@ -30,13 +37,8 @@ function stockHighlights(items: InventoryItem[]): StockHighlight[] {
 
 async function loadShopData() {
   try {
-    const account = await apiFetch<CurrentAccount>("/me");
-    const [summary, recentSales, inventory] = await Promise.all([
-      apiFetch<Summary>("/dashboard/summary"),
-      apiFetch<RecentSale[]>("/dashboard/recent-sales"),
-      apiFetch<InventoryItem[]>("/inventory"),
-    ]);
-    return { account, summary, recentSales, stock: stockHighlights(inventory), connected: true };
+    const dashboard = await apiFetch<DashboardPayload>("/dashboard");
+    return { account: dashboard.account, summary: dashboard.summary, recentSales: dashboard.recent_sales, stock: stockHighlights(dashboard.inventory), notifications: dashboard.notifications, connected: true };
   } catch (error) {
 	const detail = error instanceof Error ? error.message : "";
     return {
@@ -44,6 +46,7 @@ async function loadShopData() {
       summary: emptySummary,
       recentSales: [] as RecentSale[],
 	  stock: [] as StockHighlight[],
+	  notifications: { unpriced_batch_count: 0 },
       connected: false,
       connectionError: error instanceof ApiError && error.status === 401 ? "shopSession" : "shopUnavailable",
 	  connectionDetail: detail,
@@ -69,7 +72,7 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
   const date = formatDate(new Date(), locale, { weekday: "long", day: "numeric", month: "short" });
 
   return (
-    <AppShell>
+    <AppShell navigationData={{ pendingPriceCount: data.notifications.unpriced_batch_count, preferredLocale: data.account?.preferred_locale }}>
         <header className="relative overflow-hidden bg-[#173f31] px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))] text-white">
           <div className="absolute -right-16 -top-20 h-52 w-52 rounded-full border-[35px] border-white/5" />
           <div className="absolute -bottom-20 left-10 h-40 w-40 rounded-full bg-[#e4a94b]/10 blur-2xl" />
