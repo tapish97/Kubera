@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { formatDate, formatMoney, formatQuantity } from "@/lib/format";
 
 export type DailyReportLine={batch_id:string;fruit:string;mark:string;quality:string;size:string;unit:string;received_at:string;first_sold_at:string|null;last_sold_at:string|null;purchased_quantity:number;purchase_price_per_unit:number|null;purchase_value:number;sold_quantity:number;average_selling_price:number|null;sales_revenue:number;gross_profit:number;closing_quantity:number;profit_is_estimated:boolean;suggested_purchase_price:number|null};
-export type DetailedDailyReport={date:string;stock_batches_added:number;purchase_value:number;sale_count:number;sales_revenue:number;gross_profit:number;estimated_sale_item_count:number;unpriced_batch_count:number;closing_batch_count?:number;lines?:DailyReportLine[]};
+export type DetailedDailyReport={date:string;stock_batches_added:number;purchase_value:number;sale_count:number;sales_revenue:number;gross_profit:number;spoilage_loss:number;estimated_sale_item_count:number;unpriced_batch_count:number;closing_batch_count?:number;lines?:DailyReportLine[]};
 
 export function DailyReportPreview({report,shopName,locale,currency}:{report:DetailedDailyReport;shopName:string;locale:string;currency:string}){
  const t=useTranslations("Shop"),lines=report.lines??[];

@@ -121,6 +121,8 @@ func main() {
 		dashboardHandler.Summary,
 	)
 	protectedMux.HandleFunc("GET /reports/daily", dashboardHandler.DailyReport)
+	protectedMux.HandleFunc("POST /closings/{date}", dashboardHandler.CloseDay)
+	protectedMux.HandleFunc("GET /closings", dashboardHandler.ClosingHistory)
 	protectedMux.HandleFunc("GET /notifications/summary", dashboardHandler.NotificationSummary)
 
 	protectedMux.HandleFunc(

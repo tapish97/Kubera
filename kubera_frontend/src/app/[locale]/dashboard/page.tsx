@@ -18,6 +18,7 @@ type InventoryItem = { batch_id:string; fruit:string; mark:string; quality:strin
 type StockHighlight = { batchId:string; label:string; mark:string; quantity:number; unit:string; receivedAt:string };
 
 const emptySummary: Summary = { total_inventory_quantity: 0, today_sales: 0, today_gross_profit: 0 };
+function ageDays(value:string){return Math.max(0,Math.floor((Date.now()-new Date(value).getTime())/86400000));}
 
 function stockHighlights(items: InventoryItem[]): StockHighlight[] {
   return items.filter(item=>Number(item.quantity_remaining)>0).sort((a,b)=>new Date(a.received_at).getTime()-new Date(b.received_at).getTime()).map((item) => {
@@ -118,7 +119,7 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
         <section aria-labelledby="remaining-heading" className="px-5 pt-8">
           <div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a8d84]">{t("quickView")}</p><h2 id="remaining-heading" className="mt-1 text-lg font-semibold tracking-tight">{t("remainingStock")}</h2></div><Link href={`/${locale}/inventory`} className="text-xs font-bold text-[#216148]">{t("viewStock")} →</Link></div>
           <div className="mt-3 overflow-hidden rounded-[22px] border border-[#e7e1d5] bg-white">
-            {data.stock.length === 0 ? <div className="px-5 py-7 text-center"><p className="text-sm font-semibold">{t("noStock")}</p><Link href={`/${locale}/stock/add`} className="mt-3 inline-block text-sm font-bold text-[#216148]">{t("buyFirstStock")} →</Link></div> : data.stock.slice(0, 6).map((item) => <div key={item.batchId} className="flex items-center justify-between border-b border-[#eee9df] px-4 py-3 last:border-0"><div className="min-w-0"><p className="truncate text-sm font-bold">{item.label} · {item.mark}</p><p className="mt-0.5 text-[11px] text-[#858980]">{t("boughtOn",{date:formatDate(item.receivedAt,locale,{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})})}</p></div><p className="ml-3 shrink-0 font-bold text-[#216148]">{formatQuantity(item.quantity, locale, item.unit)}</p></div>)}
+            {data.stock.length === 0 ? <div className="px-5 py-7 text-center"><p className="text-sm font-semibold">{t("noStock")}</p><Link href={`/${locale}/stock/add`} className="mt-3 inline-block text-sm font-bold text-[#216148]">{t("buyFirstStock")} →</Link></div> : data.stock.slice(0, 6).map((item) => {const days=ageDays(item.receivedAt);return <div key={item.batchId} className={`flex items-center justify-between border-b border-l-4 border-b-[#eee9df] px-3 py-3 last:border-b-0 ${days>=5?"border-l-red-400":days>=3?"border-l-amber-400":"border-l-emerald-400"}`}><div className="min-w-0"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{item.label} · {item.mark}</p>{days>=3&&<span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${days>=5?"bg-red-50 text-red-700":"bg-amber-50 text-amber-700"}`}>{days>=5?"Urgent":"Aging"}</span>}</div><p className="mt-0.5 text-[11px] text-[#858980]">{t("boughtOn",{date:formatDate(item.receivedAt,locale,{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})})}</p></div><p className="ml-3 shrink-0 font-bold text-[#216148]">{formatQuantity(item.quantity, locale, item.unit)}</p></div>;})}
           </div>
         </section>
 

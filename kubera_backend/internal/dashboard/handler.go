@@ -13,6 +13,83 @@ type Handler struct {
 	db *pgxpool.Pool
 }
 
+type closeDayRequest struct {
+	AllowEstimates bool `json:"allow_estimates"`
+}
+
+func (h *Handler) CloseDay(w http.ResponseWriter, r *http.Request) {
+	p, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	date := r.PathValue("date")
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		writeError(w, "date must use YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+	var req closeDayRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	tz := p.Timezone
+	if tz == "" {
+		tz = "UTC"
+	}
+	var estimated int
+	err := h.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date AND si.cost_price_is_estimated`, p.ShopID, tz, date).Scan(&estimated)
+	if err != nil {
+		writeError(w, "could not close day", 500)
+		return
+	}
+	if estimated > 0 && !req.AllowEstimates {
+		writeError(w, "buying prices are required or estimates must be accepted", http.StatusConflict)
+		return
+	}
+	_, err = h.db.Exec(r.Context(), `INSERT INTO shop_daily_closings(shop_id,business_date,sales_transactions,sales_revenue,gross_profit,purchase_value,spoilage_loss,used_estimates)
+	SELECT $1,$3::date,
+	 (SELECT COUNT(*) FROM sales WHERE shop_id=$1 AND (sold_at AT TIME ZONE $2)::date=$3::date),
+	 COALESCE((SELECT SUM(si.total_sale_amount) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date),0),
+	 COALESCE((SELECT SUM(si.gross_profit) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date),0),
+	 COALESCE((SELECT SUM(quantity_received*COALESCE(purchase_price_per_unit,0)) FROM inventory_batches WHERE shop_id=$1 AND (received_at AT TIME ZONE $2)::date=$3::date),0),
+	 COALESCE((SELECT SUM(ia.quantity*COALESCE(ib.purchase_price_per_unit,0)) FROM inventory_adjustments ia JOIN inventory_batches ib ON ib.id=ia.batch_id WHERE ia.shop_id=$1 AND ia.adjustment_type IN ('spoilage','damage') AND (ia.adjusted_at AT TIME ZONE $2)::date=$3::date),0),$4
+	ON CONFLICT(shop_id,business_date) DO UPDATE SET sales_transactions=EXCLUDED.sales_transactions,sales_revenue=EXCLUDED.sales_revenue,gross_profit=EXCLUDED.gross_profit,purchase_value=EXCLUDED.purchase_value,spoilage_loss=EXCLUDED.spoilage_loss,used_estimates=EXCLUDED.used_estimates,closed_at=NOW()`, p.ShopID, tz, date, estimated > 0)
+	if err != nil {
+		writeError(w, "could not close day", 500)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "closed", "date": date, "used_estimates": estimated > 0})
+}
+
+func (h *Handler) ClosingHistory(w http.ResponseWriter, r *http.Request) {
+	shopID, ok := auth.ShopIDFromContext(r.Context())
+	if !ok {
+		writeError(w, "authentication required", 401)
+		return
+	}
+	rows, err := h.db.Query(r.Context(), `SELECT business_date,sales_transactions,sales_revenue,gross_profit,purchase_value,spoilage_loss,used_estimates,closed_at FROM shop_daily_closings WHERE shop_id=$1 ORDER BY business_date DESC LIMIT 60`, shopID)
+	if err != nil {
+		writeError(w, "could not load closing history", 500)
+		return
+	}
+	defer rows.Close()
+	items := make([]map[string]any, 0)
+	for rows.Next() {
+		var date time.Time
+		var transactions int
+		var sales, profit, purchases, loss float64
+		var estimated bool
+		var closedAt time.Time
+		if err := rows.Scan(&date, &transactions, &sales, &profit, &purchases, &loss, &estimated, &closedAt); err != nil {
+			writeError(w, "could not load closing history", 500)
+			return
+		}
+		items = append(items, map[string]any{"date": date, "sales_transactions": transactions, "sales_revenue": sales, "gross_profit": profit, "purchase_value": purchases, "spoilage_loss": loss, "used_estimates": estimated, "closed_at": closedAt})
+	}
+	writeJSON(w, 200, items)
+}
+
 func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok || principal.ShopID == "" {
@@ -65,6 +142,7 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 		SaleCount              int     `json:"sale_count"`
 		SalesRevenue           float64 `json:"sales_revenue"`
 		GrossProfit            float64 `json:"gross_profit"`
+		SpoilageLoss           float64 `json:"spoilage_loss"`
 		EstimatedSaleItemCount int     `json:"estimated_sale_item_count"`
 		UnpricedBatchCount     int     `json:"unpriced_batch_count"`
 		ClosingBatchCount      int     `json:"closing_batch_count"`
@@ -121,9 +199,6 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 		if line.PurchasedQuantity > 0 {
 			result.StockBatchesAdded++
 		}
-		if line.SoldQuantity > 0 {
-			result.SaleCount++
-		}
 		if line.ClosingQuantity > 0 {
 			result.ClosingBatchCount++
 		}
@@ -132,6 +207,12 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := rows.Err(); err != nil {
+		writeError(w, "could not load daily report", http.StatusInternalServerError)
+		return
+	}
+	if err := h.db.QueryRow(r.Context(), `SELECT
+		(SELECT COUNT(*) FROM sales WHERE shop_id=$1 AND (sold_at AT TIME ZONE $2)::date=$3::date),
+		COALESCE((SELECT SUM(ia.quantity*COALESCE(ib.purchase_price_per_unit,0)) FROM inventory_adjustments ia JOIN inventory_batches ib ON ib.id=ia.batch_id WHERE ia.shop_id=$1 AND ia.adjustment_type IN ('spoilage','damage') AND (ia.adjusted_at AT TIME ZONE $2)::date=$3::date),0)`, principal.ShopID, timezone, reportDate).Scan(&result.SaleCount, &result.SpoilageLoss); err != nil {
 		writeError(w, "could not load daily report", http.StatusInternalServerError)
 		return
 	}

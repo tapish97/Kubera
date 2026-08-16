@@ -223,6 +223,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		`
 		SELECT
 			ia.id,
+			ia.batch_id,
 			ia.adjustment_type,
 			ia.quantity,
 			COALESCE(ia.reason, ''),
@@ -256,6 +257,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var (
 			id             string
+			batchID        string
 			adjustmentType string
 			quantity       float64
 			reason         string
@@ -269,6 +271,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 		if err := rows.Scan(
 			&id,
+			&batchID,
 			&adjustmentType,
 			&quantity,
 			&reason,
@@ -285,6 +288,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 		results = append(results, map[string]any{
 			"id":              id,
+			"batch_id":        batchID,
 			"adjustment_type": adjustmentType,
 			"quantity":        quantity,
 			"reason":          reason,
