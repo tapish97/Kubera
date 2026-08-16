@@ -13,22 +13,18 @@ export const dynamic = "force-dynamic";
 
 type CurrentAccount = { profile_id: string; shop_id: string; shop_name: string; currency: string; onboarding_completed_at: string | null };
 type Summary = { total_inventory_quantity: number; today_sales: number; today_gross_profit: number };
-type RecentSale = { sale_id: string; sold_at: string; fruit: string; mark: string; quantity: number; unit: string; total_sale_amount: number };
-type InventoryItem = { batch_id: string; fruit: string; quality: string | null; size: string; quantity_remaining: number; unit: string };
-type StockHighlight = { label: string; quantity: number; unit: string };
+type RecentSale = { sale_id:string; sold_at:string; received_at:string; fruit:string; mark:string; quantity:number; unit:string; total_sale_amount:number };
+type InventoryItem = { batch_id:string; fruit:string; mark:string; quality:string|null; size:string; quantity_remaining:number; unit:string; received_at:string };
+type StockHighlight = { batchId:string; label:string; mark:string; quantity:number; unit:string; receivedAt:string };
 
 const emptySummary: Summary = { total_inventory_quantity: 0, today_sales: 0, today_gross_profit: 0 };
 
 function stockHighlights(items: InventoryItem[]): StockHighlight[] {
-  const grouped = new Map<string, StockHighlight>();
-  for (const item of items) {
+  return items.filter(item=>Number(item.quantity_remaining)>0).sort((a,b)=>new Date(a.received_at).getTime()-new Date(b.received_at).getTime()).map((item) => {
     const details = [item.quality?.trim(), item.size !== "normal" ? item.size : ""].filter(Boolean).join(", ");
     const label = details ? `${item.fruit} (${details})` : item.fruit;
-    const key = `${label.toLocaleLowerCase()}::${item.unit}`;
-    const current = grouped.get(key) ?? { label, quantity: 0, unit: item.unit };
-    current.quantity += Number(item.quantity_remaining); grouped.set(key, current);
-  }
-  return [...grouped.values()];
+    return {batchId:item.batch_id,label,mark:item.mark,quantity:Number(item.quantity_remaining),unit:item.unit,receivedAt:item.received_at};
+  });
 }
 
 async function loadShopData() {
@@ -122,7 +118,7 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
         <section aria-labelledby="remaining-heading" className="px-5 pt-8">
           <div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a8d84]">{t("quickView")}</p><h2 id="remaining-heading" className="mt-1 text-lg font-semibold tracking-tight">{t("remainingStock")}</h2></div><Link href={`/${locale}/inventory`} className="text-xs font-bold text-[#216148]">{t("viewStock")} →</Link></div>
           <div className="mt-3 overflow-hidden rounded-[22px] border border-[#e7e1d5] bg-white">
-            {data.stock.length === 0 ? <div className="px-5 py-7 text-center"><p className="text-sm font-semibold">{t("noStock")}</p><Link href={`/${locale}/stock/add`} className="mt-3 inline-block text-sm font-bold text-[#216148]">{t("buyFirstStock")} →</Link></div> : data.stock.slice(0, 6).map((item) => <div key={`${item.label}-${item.unit}`} className="flex items-center justify-between border-b border-[#eee9df] px-4 py-3.5 last:border-0"><p className="min-w-0 truncate font-bold">{item.label}</p><p className="ml-3 shrink-0 font-bold text-[#216148]">{formatQuantity(item.quantity, locale, item.unit)}</p></div>)}
+            {data.stock.length === 0 ? <div className="px-5 py-7 text-center"><p className="text-sm font-semibold">{t("noStock")}</p><Link href={`/${locale}/stock/add`} className="mt-3 inline-block text-sm font-bold text-[#216148]">{t("buyFirstStock")} →</Link></div> : data.stock.slice(0, 6).map((item) => <div key={item.batchId} className="flex items-center justify-between border-b border-[#eee9df] px-4 py-3 last:border-0"><div className="min-w-0"><p className="truncate text-sm font-bold">{item.label} · {item.mark}</p><p className="mt-0.5 text-[11px] text-[#858980]">{t("boughtOn",{date:formatDate(item.receivedAt,locale,{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})})}</p></div><p className="ml-3 shrink-0 font-bold text-[#216148]">{formatQuantity(item.quantity, locale, item.unit)}</p></div>)}
           </div>
         </section>
 
@@ -132,7 +128,7 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
             {data.recentSales.length === 0 ? (
               <div className="px-5 py-8 text-center"><div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-[#f1eee7] text-[#8a8d84]"><DashboardIcon name="sale" /></div><p className="mt-3 text-sm font-semibold">{t("noSales")}</p><p className="mt-1 text-xs text-[#8a8d84]">{t("noSalesHint")}</p></div>
             ) : data.recentSales.slice(0, 4).map((sale) => (
-              <article key={`${sale.sale_id}-${sale.fruit}`} className="flex items-center justify-between border-b border-[#eee9df] px-4 py-3.5 last:border-0"><div className="min-w-0"><p className="truncate text-sm font-bold">{sale.mark} · {sale.fruit}</p><p className="mt-0.5 text-xs text-[#858980]">{formatQuantity(sale.quantity, locale, sale.unit)}</p></div><p className="ml-3 text-sm font-bold text-[#216148]">{formatMoney(sale.total_sale_amount, locale, currency)}</p></article>
+              <article key={`${sale.sale_id}-${sale.fruit}`} className="flex items-center justify-between border-b border-[#eee9df] px-4 py-3 last:border-0"><div className="min-w-0"><p className="truncate text-sm font-bold">{sale.mark} · {sale.fruit}</p><p className="mt-0.5 text-[11px] text-[#858980]">{t("boughtShort",{date:formatDate(sale.received_at,locale,{day:"numeric",month:"short"})})} · {t("soldShort",{date:formatDate(sale.sold_at,locale,{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})})}</p><p className="mt-0.5 text-xs text-[#858980]">{formatQuantity(sale.quantity,locale,sale.unit)}</p></div><p className="ml-3 text-sm font-bold text-[#216148]">{formatMoney(sale.total_sale_amount,locale,currency)}</p></article>
             ))}
           </div>
         </section>

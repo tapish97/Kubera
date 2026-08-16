@@ -38,22 +38,25 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type Line struct {
-		BatchID                string   `json:"batch_id"`
-		Fruit                  string   `json:"fruit"`
-		Mark                   string   `json:"mark"`
-		Quality                string   `json:"quality"`
-		Size                   string   `json:"size"`
-		Unit                   string   `json:"unit"`
-		PurchasedQuantity      float64  `json:"purchased_quantity"`
-		PurchasePricePerUnit   *float64 `json:"purchase_price_per_unit"`
-		PurchaseValue          float64  `json:"purchase_value"`
-		SoldQuantity           float64  `json:"sold_quantity"`
-		AverageSellingPrice    *float64 `json:"average_selling_price"`
-		SalesRevenue           float64  `json:"sales_revenue"`
-		GrossProfit            float64  `json:"gross_profit"`
-		ClosingQuantity        float64  `json:"closing_quantity"`
-		ProfitIsEstimated      bool     `json:"profit_is_estimated"`
-		SuggestedPurchasePrice *float64 `json:"suggested_purchase_price"`
+		BatchID                string     `json:"batch_id"`
+		Fruit                  string     `json:"fruit"`
+		Mark                   string     `json:"mark"`
+		Quality                string     `json:"quality"`
+		Size                   string     `json:"size"`
+		Unit                   string     `json:"unit"`
+		ReceivedAt             time.Time  `json:"received_at"`
+		FirstSoldAt            *time.Time `json:"first_sold_at"`
+		LastSoldAt             *time.Time `json:"last_sold_at"`
+		PurchasedQuantity      float64    `json:"purchased_quantity"`
+		PurchasePricePerUnit   *float64   `json:"purchase_price_per_unit"`
+		PurchaseValue          float64    `json:"purchase_value"`
+		SoldQuantity           float64    `json:"sold_quantity"`
+		AverageSellingPrice    *float64   `json:"average_selling_price"`
+		SalesRevenue           float64    `json:"sales_revenue"`
+		GrossProfit            float64    `json:"gross_profit"`
+		ClosingQuantity        float64    `json:"closing_quantity"`
+		ProfitIsEstimated      bool       `json:"profit_is_estimated"`
+		SuggestedPurchasePrice *float64   `json:"suggested_purchase_price"`
 	}
 	type Report struct {
 		Date                   string  `json:"date"`
@@ -77,13 +80,15 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 		 COALESCE(SUM(si.gross_profit) FILTER (WHERE s.sold_at>=b.start_at AND s.sold_at<b.end_at),0) profit_today,
 		 COALESCE(SUM(si.quantity) FILTER (WHERE s.sold_at<b.end_at),0) sold_through_day,
 		 BOOL_OR(si.cost_price_is_estimated AND s.sold_at>=b.start_at AND s.sold_at<b.end_at) estimated,
+		 MIN(s.sold_at) FILTER (WHERE s.sold_at>=b.start_at AND s.sold_at<b.end_at) first_sold_at,
+		 MAX(s.sold_at) FILTER (WHERE s.sold_at>=b.start_at AND s.sold_at<b.end_at) last_sold_at,
 		 COUNT(*) FILTER (WHERE si.cost_price_is_estimated AND s.sold_at>=b.start_at AND s.sold_at<b.end_at) estimated_count
 		FROM sale_items si JOIN sales s ON s.id=si.sale_id CROSS JOIN bounds b WHERE s.shop_id=$1 AND s.sold_at<b.end_at GROUP BY si.batch_id
 	), adjustments AS (
 		SELECT ia.batch_id, COALESCE(SUM(CASE WHEN ia.adjustment_type IN ('customer_return','correction_increase') THEN ia.quantity ELSE -ia.quantity END),0) net
 		FROM inventory_adjustments ia CROSS JOIN bounds b WHERE ia.shop_id=$1 AND ia.adjusted_at<b.end_at GROUP BY ia.batch_id
 	)
-	SELECT ib.id,f.name,s.mark,COALESCE(ib.quality,''),ib.size,ib.unit,
+	SELECT ib.id,f.name,s.mark,COALESCE(ib.quality,''),ib.size,ib.unit,ib.received_at,sb.first_sold_at,sb.last_sold_at,
 	 CASE WHEN ib.received_at>=b.start_at THEN ib.quantity_received ELSE 0 END,
 	 ib.purchase_price_per_unit,
 	 CASE WHEN ib.received_at>=b.start_at THEN ib.quantity_received*COALESCE(ib.purchase_price_per_unit,0) ELSE 0 END,
@@ -104,7 +109,7 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var line Line
 		var estimatedCount int
-		if err := rows.Scan(&line.BatchID, &line.Fruit, &line.Mark, &line.Quality, &line.Size, &line.Unit, &line.PurchasedQuantity, &line.PurchasePricePerUnit, &line.PurchaseValue, &line.SoldQuantity, &line.AverageSellingPrice, &line.SalesRevenue, &line.GrossProfit, &line.ClosingQuantity, &line.ProfitIsEstimated, &line.SuggestedPurchasePrice, &estimatedCount); err != nil {
+		if err := rows.Scan(&line.BatchID, &line.Fruit, &line.Mark, &line.Quality, &line.Size, &line.Unit, &line.ReceivedAt, &line.FirstSoldAt, &line.LastSoldAt, &line.PurchasedQuantity, &line.PurchasePricePerUnit, &line.PurchaseValue, &line.SoldQuantity, &line.AverageSellingPrice, &line.SalesRevenue, &line.GrossProfit, &line.ClosingQuantity, &line.ProfitIsEstimated, &line.SuggestedPurchasePrice, &estimatedCount); err != nil {
 			writeError(w, "could not load daily report", http.StatusInternalServerError)
 			return
 		}
@@ -365,6 +370,7 @@ func (h *Handler) RecentSales(w http.ResponseWriter, r *http.Request) {
 		SELECT
 			s.id,
 			s.sold_at,
+			ib.received_at,
 			f.name,
 			sup.mark,
 			ib.quality,
@@ -402,6 +408,7 @@ func (h *Handler) RecentSales(w http.ResponseWriter, r *http.Request) {
 		var (
 			saleID          string
 			soldAt          any
+			receivedAt      any
 			fruit           string
 			mark            string
 			quality         *string
@@ -416,6 +423,7 @@ func (h *Handler) RecentSales(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(
 			&saleID,
 			&soldAt,
+			&receivedAt,
 			&fruit,
 			&mark,
 			&quality,
@@ -433,6 +441,7 @@ func (h *Handler) RecentSales(w http.ResponseWriter, r *http.Request) {
 		results = append(results, map[string]any{
 			"sale_id":                saleID,
 			"sold_at":                soldAt,
+			"received_at":            receivedAt,
 			"fruit":                  fruit,
 			"mark":                   mark,
 			"quality":                quality,
