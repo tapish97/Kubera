@@ -430,7 +430,8 @@ func (h *Handler) ListUnpriced(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.db.Query(r.Context(), `SELECT ib.id, f.name, s.mark, ib.quality, ib.size, ib.unit, ib.quantity_received, ib.quantity_remaining, ib.received_at,
-		COALESCE(SUM(si.quantity),0), CASE WHEN COALESCE(SUM(si.quantity),0)>0 THEN (SUM(si.total_sale_amount)/SUM(si.quantity))*0.94 ELSE NULL END
+		COALESCE(SUM(si.quantity),0), COALESCE(SUM(si.total_sale_amount),0), CASE WHEN COALESCE(SUM(si.quantity),0)>0 THEN SUM(si.total_sale_amount)/SUM(si.quantity) END,
+		CASE WHEN COALESCE(SUM(si.quantity),0)>0 THEN (SUM(si.total_sale_amount)/SUM(si.quantity))*0.94 ELSE NULL END
 		FROM inventory_batches ib JOIN fruits f ON f.id=ib.fruit_id JOIN suppliers s ON s.id=ib.supplier_id LEFT JOIN sale_items si ON si.batch_id=ib.id
 		WHERE ib.shop_id=$1 AND ib.purchase_price_per_unit IS NULL
 		GROUP BY ib.id,f.name,s.mark,ib.quality,ib.size,ib.unit,ib.quantity_received,ib.quantity_remaining,ib.received_at ORDER BY ib.received_at DESC`, shopID)
@@ -444,13 +445,13 @@ func (h *Handler) ListUnpriced(w http.ResponseWriter, r *http.Request) {
 		var id, fruit, mark, size, unit string
 		var quality *string
 		var receivedAt time.Time
-		var received, remaining, sold float64
-		var suggested *float64
-		if err := rows.Scan(&id, &fruit, &mark, &quality, &size, &unit, &received, &remaining, &receivedAt, &sold, &suggested); err != nil {
+		var received, remaining, sold, revenue float64
+		var averageSelling, suggested *float64
+		if err := rows.Scan(&id, &fruit, &mark, &quality, &size, &unit, &received, &remaining, &receivedAt, &sold, &revenue, &averageSelling, &suggested); err != nil {
 			writeError(w, "could not load unsettled prices", http.StatusInternalServerError)
 			return
 		}
-		items = append(items, map[string]any{"batch_id": id, "fruit": fruit, "mark": mark, "quality": quality, "size": size, "unit": unit, "quantity_received": received, "quantity_remaining": remaining, "quantity_sold": sold, "received_at": receivedAt, "suggested_purchase_price_per_unit": suggested})
+		items = append(items, map[string]any{"batch_id": id, "fruit": fruit, "mark": mark, "quality": quality, "size": size, "unit": unit, "quantity_received": received, "quantity_remaining": remaining, "quantity_sold": sold, "sales_revenue": revenue, "average_selling_price": averageSelling, "received_at": receivedAt, "suggested_purchase_price_per_unit": suggested})
 	}
 	writeJSON(w, http.StatusOK, items)
 }

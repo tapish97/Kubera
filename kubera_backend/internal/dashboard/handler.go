@@ -37,6 +37,24 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	type Line struct {
+		BatchID                string   `json:"batch_id"`
+		Fruit                  string   `json:"fruit"`
+		Mark                   string   `json:"mark"`
+		Quality                string   `json:"quality"`
+		Size                   string   `json:"size"`
+		Unit                   string   `json:"unit"`
+		PurchasedQuantity      float64  `json:"purchased_quantity"`
+		PurchasePricePerUnit   *float64 `json:"purchase_price_per_unit"`
+		PurchaseValue          float64  `json:"purchase_value"`
+		SoldQuantity           float64  `json:"sold_quantity"`
+		AverageSellingPrice    *float64 `json:"average_selling_price"`
+		SalesRevenue           float64  `json:"sales_revenue"`
+		GrossProfit            float64  `json:"gross_profit"`
+		ClosingQuantity        float64  `json:"closing_quantity"`
+		ProfitIsEstimated      bool     `json:"profit_is_estimated"`
+		SuggestedPurchasePrice *float64 `json:"suggested_purchase_price"`
+	}
 	type Report struct {
 		Date                   string  `json:"date"`
 		StockBatchesAdded      int     `json:"stock_batches_added"`
@@ -46,18 +64,69 @@ func (h *Handler) DailyReport(w http.ResponseWriter, r *http.Request) {
 		GrossProfit            float64 `json:"gross_profit"`
 		EstimatedSaleItemCount int     `json:"estimated_sale_item_count"`
 		UnpricedBatchCount     int     `json:"unpriced_batch_count"`
+		ClosingBatchCount      int     `json:"closing_batch_count"`
+		Lines                  []Line  `json:"lines"`
 	}
-	result := Report{Date: reportDate}
-	err = h.db.QueryRow(r.Context(), `SELECT
-		(SELECT COUNT(*) FROM inventory_batches WHERE shop_id=$1 AND (received_at AT TIME ZONE $2)::date=$3::date),
-		COALESCE((SELECT SUM(quantity_received * COALESCE(purchase_price_per_unit,0)) FROM inventory_batches WHERE shop_id=$1 AND (received_at AT TIME ZONE $2)::date=$3::date),0),
-		(SELECT COUNT(*) FROM sales WHERE shop_id=$1 AND (sold_at AT TIME ZONE $2)::date=$3::date),
-		COALESCE((SELECT SUM(si.total_sale_amount) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date),0),
-		COALESCE((SELECT SUM(si.gross_profit) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date),0),
-		(SELECT COUNT(*) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.shop_id=$1 AND (s.sold_at AT TIME ZONE $2)::date=$3::date AND si.cost_price_is_estimated),
-		(SELECT COUNT(DISTINCT ib.id) FROM inventory_batches ib LEFT JOIN sale_items si ON si.batch_id=ib.id LEFT JOIN sales s ON s.id=si.sale_id WHERE ib.shop_id=$1 AND ib.purchase_price_per_unit IS NULL AND ((ib.received_at AT TIME ZONE $2)::date=$3::date OR (s.sold_at AT TIME ZONE $2)::date=$3::date))`, principal.ShopID, timezone, reportDate).
-		Scan(&result.StockBatchesAdded, &result.PurchaseValue, &result.SaleCount, &result.SalesRevenue, &result.GrossProfit, &result.EstimatedSaleItemCount, &result.UnpricedBatchCount)
+	result := Report{Date: reportDate, Lines: make([]Line, 0)}
+	rows, err := h.db.Query(r.Context(), `WITH bounds AS (
+		SELECT ($3::date::timestamp AT TIME ZONE $2) AS start_at, (($3::date + 1)::timestamp AT TIME ZONE $2) AS end_at
+	), sales_by_batch AS (
+		SELECT si.batch_id,
+		 COALESCE(SUM(si.quantity) FILTER (WHERE s.sold_at>=b.start_at AND s.sold_at<b.end_at),0) sold_today,
+		 COALESCE(SUM(si.total_sale_amount) FILTER (WHERE s.sold_at>=b.start_at AND s.sold_at<b.end_at),0) revenue_today,
+		 COALESCE(SUM(si.gross_profit) FILTER (WHERE s.sold_at>=b.start_at AND s.sold_at<b.end_at),0) profit_today,
+		 COALESCE(SUM(si.quantity) FILTER (WHERE s.sold_at<b.end_at),0) sold_through_day,
+		 BOOL_OR(si.cost_price_is_estimated AND s.sold_at>=b.start_at AND s.sold_at<b.end_at) estimated,
+		 COUNT(*) FILTER (WHERE si.cost_price_is_estimated AND s.sold_at>=b.start_at AND s.sold_at<b.end_at) estimated_count
+		FROM sale_items si JOIN sales s ON s.id=si.sale_id CROSS JOIN bounds b WHERE s.shop_id=$1 AND s.sold_at<b.end_at GROUP BY si.batch_id
+	), adjustments AS (
+		SELECT ia.batch_id, COALESCE(SUM(CASE WHEN ia.adjustment_type IN ('customer_return','correction_increase') THEN ia.quantity ELSE -ia.quantity END),0) net
+		FROM inventory_adjustments ia CROSS JOIN bounds b WHERE ia.shop_id=$1 AND ia.adjusted_at<b.end_at GROUP BY ia.batch_id
+	)
+	SELECT ib.id,f.name,s.mark,COALESCE(ib.quality,''),ib.size,ib.unit,
+	 CASE WHEN ib.received_at>=b.start_at THEN ib.quantity_received ELSE 0 END,
+	 ib.purchase_price_per_unit,
+	 CASE WHEN ib.received_at>=b.start_at THEN ib.quantity_received*COALESCE(ib.purchase_price_per_unit,0) ELSE 0 END,
+	 COALESCE(sb.sold_today,0), CASE WHEN sb.sold_today>0 THEN sb.revenue_today/sb.sold_today END,
+	 COALESCE(sb.revenue_today,0),COALESCE(sb.profit_today,0),
+	 GREATEST(ib.quantity_received-COALESCE(sb.sold_through_day,0)+COALESCE(a.net,0),0),COALESCE(sb.estimated,FALSE),
+	 CASE WHEN ib.purchase_price_per_unit IS NULL AND sb.sold_today>0 THEN (sb.revenue_today/sb.sold_today)*0.94 END,
+	 COALESCE(sb.estimated_count,0)
+	FROM inventory_batches ib JOIN fruits f ON f.id=ib.fruit_id JOIN suppliers s ON s.id=ib.supplier_id CROSS JOIN bounds b
+	LEFT JOIN sales_by_batch sb ON sb.batch_id=ib.id LEFT JOIN adjustments a ON a.batch_id=ib.id
+	WHERE ib.shop_id=$1 AND ib.received_at<b.end_at AND (ib.received_at>=b.start_at OR COALESCE(sb.sold_today,0)>0 OR GREATEST(ib.quantity_received-COALESCE(sb.sold_through_day,0)+COALESCE(a.net,0),0)>0)
+	ORDER BY lower(f.name),lower(s.mark),ib.received_at`, principal.ShopID, timezone, reportDate)
 	if err != nil {
+		writeError(w, "could not load daily report", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var line Line
+		var estimatedCount int
+		if err := rows.Scan(&line.BatchID, &line.Fruit, &line.Mark, &line.Quality, &line.Size, &line.Unit, &line.PurchasedQuantity, &line.PurchasePricePerUnit, &line.PurchaseValue, &line.SoldQuantity, &line.AverageSellingPrice, &line.SalesRevenue, &line.GrossProfit, &line.ClosingQuantity, &line.ProfitIsEstimated, &line.SuggestedPurchasePrice, &estimatedCount); err != nil {
+			writeError(w, "could not load daily report", http.StatusInternalServerError)
+			return
+		}
+		result.Lines = append(result.Lines, line)
+		result.PurchaseValue += line.PurchaseValue
+		result.SalesRevenue += line.SalesRevenue
+		result.GrossProfit += line.GrossProfit
+		result.EstimatedSaleItemCount += estimatedCount
+		if line.PurchasedQuantity > 0 {
+			result.StockBatchesAdded++
+		}
+		if line.SoldQuantity > 0 {
+			result.SaleCount++
+		}
+		if line.ClosingQuantity > 0 {
+			result.ClosingBatchCount++
+		}
+		if line.PurchasePricePerUnit == nil && (line.PurchasedQuantity > 0 || line.SoldQuantity > 0) {
+			result.UnpricedBatchCount++
+		}
+	}
+	if err := rows.Err(); err != nil {
 		writeError(w, "could not load daily report", http.StatusInternalServerError)
 		return
 	}

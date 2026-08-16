@@ -42,3 +42,10 @@ button {
     transition-duration: 0.01ms !important;
   }
 }
+@media print {
+  nav, .print\:hidden { display: none !important; }
+  body, main { background: white !important; }
+  main { max-width: none !important; padding: 0 !important; box-shadow: none !important; }
+  .report-preview { width: 100%; font-size: 11px; }
+  @page { size: A4; margin: 12mm; }
+}
