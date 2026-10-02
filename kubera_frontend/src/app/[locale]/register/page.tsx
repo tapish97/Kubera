@@ -46,7 +46,7 @@ export default function RegisterPage() {
   return (
     <main className="min-h-screen bg-[#f5f1e8] px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))] text-[#20241f]">
       <div className="mx-auto w-full max-w-sm">
-        <div className="mb-4 flex justify-end"><LanguageSwitcher /></div>
+        <div className="mb-4 flex justify-end"><LanguageSwitcher persistPreference={false} /></div>
         <section className="relative overflow-hidden rounded-[30px] bg-[#173f31] px-6 py-8 text-white shadow-[0_18px_45px_rgba(23,63,49,0.2)]">
           <div className="absolute -right-12 -top-16 h-40 w-40 rounded-full border-[28px] border-white/5" />
           <p className="relative text-xs font-bold uppercase tracking-[0.24em] text-[#f1bb5d]">Kubera</p>
